@@ -1,0 +1,17 @@
+    NOTICE
+
+    This project uses third-party libraries:
+
+    - D3.js (BSD 3-Clause License)
+    Copyright (c) Mike Bostock
+    https://d3js.org/
+
+    - Tailwind CSS (MIT License)
+    Copyright (c) Tailwind Labs, Inc.
+    https://tailwindcss.com/
+
+    - Ace Editor (BSD 3-Clause License)
+    Copyright (c) Ajax.org B.V. and others
+    https://ace.c9.io/
+
+    All third-party libraries are used under their respective licenses.
