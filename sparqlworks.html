@@ -1,0 +1,3401 @@
+
+
+<!--
+    Copyright (c) 2025 OpenLink Software, Daniel Heward-Mills
+    Licensed under the Apache License, Version 2.0
+    See LICENSE file in the project root for details.
+
+    NOTICE
+
+    This project uses third-party libraries:
+
+    - D3.js (BSD 3-Clause License)
+    Copyright (c) Mike Bostock
+    https://d3js.org/
+
+    - Tailwind CSS (MIT License)
+    Copyright (c) Tailwind Labs, Inc.
+    https://tailwindcss.com/
+
+    - Ace Editor (BSD 3-Clause License)
+    Copyright (c) Ajax.org B.V. and others
+    https://ace.c9.io/
+
+    All third-party libraries are used under their respective licenses.
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPARQL Query Visualizer</title>
+
+    <!-- Structured Data for Search Engines (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+      "@context": {
+        "@vocab": "https://schema.org/"
+      },
+      "@type": "WebPage",
+      "name": "SPARQL Query Visualizer",
+      "description": "An interactive SPARQL Query Visualizer and graph visualizer for RDF/Linked Data. Build queries in Basic or Advanced modes and visualize results.",
+      "keywords": "SPARQL, RDF, Linked Data, Knowledge Graph, Graph Visualization, D3.js, JSON-LD",
+      "mainEntity": {
+        "@type": "WebApplication",
+        "name": "SPARQL Query Visualizer",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires a modern web browser",
+        "description": "Compose and run SPARQL CONSTRUCT/SELECT queries and visualize the result graph."
+      }
+    }
+    </script>
+
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+            overflow: hidden;
+            background-color: #f2f2f7; /* iOS grouped background */
+            color: #1c1c1e; /* iOS label color */
+        }
+
+        .graph-container {
+            width: 100%;
+            height: 100vh;
+            position: relative;
+            cursor: move;
+        }
+
+        .links line {
+            stroke: #999;
+            stroke-opacity: 0.6;
+            stroke-width: 2.5; /* thicker edges */
+        }
+
+        .nodes circle {
+            stroke: #fff;
+            stroke-width: 1.5px;
+            transition: r 0.2s ease-in-out;
+            cursor: pointer;
+        }
+
+        .node-label-group {
+            cursor: pointer;
+        }
+
+        .node-label-group text {
+            font-size: 13px; /* larger labels */
+            fill: #333;
+        }
+
+        .predicate-icon-group {
+            cursor: pointer;
+            fill: #555;
+        }
+
+        .predicate-icon-group:hover {
+            fill: #1d4ed8;
+        }
+
+        .clickable-label {
+            text-decoration: underline;
+            fill: #2563eb;
+        }
+
+        .clickable-label:hover {
+            fill: #1d4ed8;
+        }
+
+        #tooltip {
+            position: absolute;
+            visibility: hidden;
+            background-color: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            max-width: 350px;
+            pointer-events: none;
+            z-index: 20;
+            transition: opacity 0.2s;
+        }
+
+        #controls-toggle {
+            position: absolute;
+            top: 3rem;
+            right: 1rem;
+            z-index: 15;
+        }
+
+        .controls {
+            position: absolute;
+            top: 4rem;
+            right: 1rem;
+            background: rgba(255, 255, 255, 0.65);
+            backdrop-filter: saturate(180%) blur(12px);
+            border-radius: 1rem; /* iOS rounded */
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.08), 0 3px 6px rgba(0,0,0,0.06);
+            z-index: 10;
+            max-width: 320px;
+        }
+
+        .controls-header {
+            padding: 0.75rem 1rem;
+            background-color: rgba(255, 255, 255, 0.6);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+            cursor: grab;
+        }
+
+        .control-group label,
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            text-transform: capitalize;
+        }
+
+        .control-group input[type="range"] {
+            width: 100%;
+        }
+
+        .filter-group label {
+            cursor: pointer;
+        }
+
+        .legend-color-swatch {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 1px solid rgba(0, 0, 0, 0.2);
+        }
+
+        /* Lightweight code editor with line numbers */
+        .code-editor {
+            display: grid;
+            grid-template-columns: 3rem 1fr;
+            width: 100%;
+            align-items: stretch;
+            overflow: hidden; /* keep rounded corners clean */
+            border-radius: 0.75rem; /* match rounded-xl */
+        }
+        .code-editor .line-numbers {
+            background: rgba(0,0,0,0.04);
+            color: #6b7280; /* gray-500 */
+            padding: 0.75rem 0.5rem; /* match textarea vertical padding */
+            text-align: right;
+            user-select: none;
+            cursor: pointer;
+            overflow: auto; /* allow scrolling to stay in sync with textarea */
+            border-right: 1px solid rgba(0,0,0,0.06);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 0.875rem; /* text-sm */
+            line-height: 1.5rem; /* match textarea line-height */
+            white-space: pre;
+        }
+        .code-editor textarea.editor {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 0.875rem;
+            line-height: 1.5rem;
+            background: transparent;
+            border: 0;
+            outline: none;
+            resize: none;
+            white-space: pre;
+            tab-size: 2;
+            width: 100%;
+            display: block;
+            box-sizing: border-box; /* avoid overflow due to padding */
+        }
+
+        /* Variable suggestions dropdown */
+        .var-suggest {
+            position: absolute;
+            z-index: 50;
+            background: #fff;
+            border: 1px solid rgba(0,0,0,0.1);
+            border-radius: 8px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.12), 0 3px 6px rgba(0,0,0,0.06);
+            padding: 4px;
+            min-width: 160px;
+            max-width: 280px;
+            max-height: 220px;
+            overflow-y: auto;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 12px;
+        }
+        .var-suggest.hidden { display: none; }
+        .var-suggest-item { padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+        .var-suggest-item:hover, .var-suggest-item.active { background: #eef2ff; }
+        /* Controls panel: keep within viewport and allow infinite scroll */
+        #controls {
+            max-height: calc(100vh - 32px);
+            overflow-y: auto;
+        }
+        #controls .controls-header {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: rgba(255,255,255,0.85);
+            backdrop-filter: blur(6px);
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+        }
+        /* Ensure Ace shows scrollbars clearly */
+        #basic-editor, #adv-editor { overflow: hidden; }
+        #basic-editor .ace_scrollbar, #adv-editor .ace_scrollbar {
+            display: block !important;
+            opacity: 1 !important;
+        }
+        #basic-editor .ace_scrollbar-v, #adv-editor .ace_scrollbar-v { width: 12px; }
+        #basic-editor .ace_scrollbar-h, #adv-editor .ace_scrollbar-h { height: 12px; }
+        #basic-editor .ace_scrollbar::-webkit-scrollbar, #adv-editor .ace_scrollbar::-webkit-scrollbar {
+            width: 12px; height: 12px;
+        }
+        #basic-editor .ace_scrollbar::-webkit-scrollbar-thumb, #adv-editor .ace_scrollbar::-webkit-scrollbar-thumb {
+            background-color: rgba(0,0,0,0.25);
+            border-radius: 8px;
+        }
+
+        /* Ensure the floating query panel never gets clipped on smaller viewports */
+        #query-panel {
+            max-height: calc(100vh - 2rem);
+            overflow: auto;
+        }
+    </style>
+    <!-- Lightweight embedded code editor (Ace) -->
+    <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.32.9/src-min-noconflict/ace.js"></script>
+    <script>try{ ace.config.set('basePath','https://cdn.jsdelivr.net/npm/ace-builds@1.32.9/src-min-noconflict'); }catch(_){}</script>
+    <!-- OAuth: handled inline below -->
+</head>
+
+<body class="bg-gray-50">
+
+    <button id="controls-toggle"
+        class="fixed top-14 right-4 p-2 rounded-full bg-white/70 backdrop-blur-sm shadow-md hover:bg-gray-200 transition-colors z-30">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-700">
+            <path
+                d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0-2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z">
+            </path>
+            <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+    </button>
+
+    <!-- Floating Copy Link icon under the gearbox -->
+    <button id="copy-link-fab" title="Copy share link"
+        class="fixed top-24 right-4 p-2 rounded-full bg-white/70 backdrop-blur-sm shadow-md hover:bg-gray-200 transition-colors z-20">
+        <!-- Link icon -->
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-700">
+            <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 5"/>
+            <path d="M14 11a5 5 0 0 0-7.07 0L5.5 12.43a5 5 0 0 0 7.07 7.07L14 19"/>
+        </svg>
+    </button>
+
+    <!-- Toast container -->
+    <div id="toast" class="fixed top-4 right-4 z-40 hidden">
+        <div id="toast-inner" class="px-3 py-2 rounded-lg shadow bg-gray-800 text-white text-sm"></div>
+    </div>
+
+    <!-- Mode switch warning modal (top-level, not inside hidden containers) -->
+    <div id="mode-switch-modal" class="fixed inset-0 z-50 hidden">
+      <div class="absolute inset-0 bg-black/30" data-ms-close="1"></div>
+      <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="w-[28rem] max-w-full rounded-2xl bg-white shadow-xl border border-white/40 overflow-hidden">
+          <div class="px-4 py-3 border-b border-gray-100">
+            <h3 class="text-base font-semibold text-gray-800">Switch to Basic?</h3>
+          </div>
+          <div class="px-4 py-3 text-sm text-gray-700 space-y-3">
+            <p>You have changes in the Advanced editor. Editing in Basic will overwrite your Advanced query.</p>
+            <ul class="list-disc pl-5 text-gray-600">
+              <li>Proceed to Basic to build from the simple WHERE body.</li>
+              <li>Stay on Advanced to keep and continue editing your custom query.</li>
+            </ul>
+          </div>
+          <div class="px-4 py-3 bg-gray-50 flex items-center justify-end gap-2 border-t border-gray-100">
+            <button id="mode-switch-cancel" class="px-3 py-2 rounded bg-white text-gray-800 border hover:bg-gray-100">Stay on Advanced</button>
+            <button id="mode-switch-proceed" class="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Proceed to Basic</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="controls" class="controls hidden">
+        <div class="controls-header">
+            <h3 class="font-semibold text-gray-700">Controls</h3>
+        </div>
+        <div class="p-4">
+            <div class="control-group mb-4">
+                <label for="charge">Physics: Charge Strength</label>
+                <input type="range" id="charge" min="-1000" max="0" value="-600" step="10">
+            </div>
+            <div class="control-group mb-4">
+                <label for="link-distance">Physics: Link Distance</label>
+                <input type="range" id="link-distance" min="10" max="300" value="180" step="5">
+            </div>
+            <hr class="my-4">
+            <div class="control-group mb-2">
+                <label class="inline-flex items-center gap-2">
+                    <input id="hover-focus-toggle" type="checkbox" class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4" checked>
+                    <span>Hover focus (0.5s delay)</span>
+                </label>
+            </div>
+            <div class="control-group mb-2">
+                <label class="inline-flex items-center gap-2">
+                    <input id="friendly-labels-toggle" type="checkbox" class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4" checked>
+                    <span>Use friendly labels (if available)</span>
+                    <button id="friendly-labels-gear" type="button" title="Label priority settings"
+                        class="p-1 rounded hover:bg-gray-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0-2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                    </button>
+                </label>
+            </div>
+            <div class="control-group mb-2">
+                <label for="pref-lang" class="block text-sm text-gray-700 mb-1">Preferred Language</label>
+                <input id="pref-lang" type="text" placeholder="e.g., en, fr, de" class="w-full p-1 rounded-md bg-white/80 border border-white/40 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <hr class="my-4">
+            <!-- Type filter accordion (moved above Filter by Type) -->
+            <div class="type-filter-group">
+                <button id="type-accordion-header" class="w-full flex items-center justify-between px-1 py-2 rounded hover:bg-gray-100">
+                    <h3 class="font-semibold">Filter by rdf:type</h3>
+                    <svg id="type-accordion-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="transition-transform -rotate-90"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div id="type-accordion-content" class="mt-2 hidden">
+                    <div class="flex items-center justify-end mb-2">
+                        <button id="type-select-all" class="text-xs px-2 py-1 rounded border hover:bg-gray-100">Select all</button>
+                    </div>
+                    <div id="type-filter-list" class="flex flex-col space-y-1"></div>
+                    <p id="type-filter-empty" class="text-xs text-gray-500 hidden">No rdf:type values found in the current graph.</p>
+                </div>
+            </div>
+
+            <hr class="my-4">
+            <!-- Property filter accordion (moved above Filter by Type) -->
+            <div class="property-filter-group">
+                <button id="prop-accordion-header" class="w-full flex items-center justify-between px-1 py-2 rounded hover:bg-gray-100">
+                    <h3 class="font-semibold">Filter by property</h3>
+                    <svg id="prop-accordion-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="transition-transform -rotate-90"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div id="prop-accordion-content" class="mt-2 hidden">
+                    <div class="flex items-center justify-end mb-2">
+                        <button id="prop-select-all" class="text-xs px-2 py-1 rounded border hover:bg-gray-100">Select all</button>
+                    </div>
+                    <div id="property-filter-list" class="flex flex-col space-y-1"></div>
+                    <p id="property-filter-empty" class="text-xs text-gray-500 hidden">No properties found in the current graph.</p>
+                </div>
+            </div>
+
+            <hr class="my-4">
+            <div class="filter-group">
+                <h3 class="font-semibold mb-2">Filter by Type</h3>
+                <div id="filter-checkboxes" class="flex flex-col space-y-1"></div>
+            </div>
+            <hr class="my-4">
+            <div class="mb-3">
+                <label class="inline-flex items-center gap-2">
+                    <input id="show-types-toggle" type="checkbox" class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4">
+                    <span>Hide types</span>
+                </label>
+                <p class="text-xs text-gray-500 mt-1">When checked, rdf:type nodes and edges are hidden.</p>
+            </div>
+            <hr class="my-4">
+            <div class="legend-group">
+                <h3 class="font-semibold mb-2">Legend</h3>
+                <div id="color-legend" class="space-y-1"></div>
+            </div>
+            <hr class="my-4">
+            <div class="control-group mb-3">
+                <label class="block text-sm font-semibold text-gray-800 mb-1">Edge Annotations</label>
+                <div class="flex items-center gap-4 text-sm">
+                    <label class="inline-flex items-center gap-2">
+                        <input type="radio" name="edge-annot" id="edge-annot-icons" value="icons" class="text-blue-600 focus:ring-blue-500" />
+                        <span>Icons</span>
+                    </label>
+                    <label class="inline-flex items-center gap-2">
+                        <input type="radio" name="edge-annot" id="edge-annot-names" value="names" class="text-blue-600 focus:ring-blue-500" />
+                        <span>Predicate names</span>
+                    </label>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">When showing names, only the local term of the predicate IRI is displayed.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Account button (auth optional) -->
+    <button id="account-button" title="Account" class="fixed top-2 right-4 p-2 rounded-full bg-white/70 backdrop-blur-sm shadow-md hover:bg-gray-200 transition-colors z-40 border" style="border-color: rgba(0,0,0,0.1);">
+        <svg id="account-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-3-3.87"/><path d="M4 21v-2a4 4 0 0 1 3-3.87"/><circle cx="12" cy="7" r="4"/></svg>
+    </button>
+    <div id="account-menu" class="hidden fixed top-20 right-4 z-50 bg-white/95 backdrop-blur-xl rounded-xl border border-white/50 shadow-lg w-60 p-3">
+        <!--
+        <div id="acct-status" class="px-2 py-2 text-sm text-gray-700">Not signed in</div>
+        <div class="border-t my-1"></div>
+        <button id="acct-login" class="w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm">Log in / Sign up</button>
+        <button id="acct-settings" class="w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm">Settings</button>
+        <button id="acct-logout" class="w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm hidden">Log out</button>
+        -->
+        <div class="text-sm text-gray-700">Sign-in options <span class="italic">coming soon</span>.</div>
+    </div>
+
+    <!-- OAuth Settings modal -->
+    <div id="solid-settings-modal" class="fixed inset-0 z-40 hidden">
+      <div class="absolute inset-0 bg-black/30" data-close="1"></div>
+      <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="w-[30rem] max-w-full rounded-2xl bg-white shadow-xl border border-white/40 overflow-hidden">
+          <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <h3 class="text-base font-semibold text-gray-800">OAuth Settings</h3>
+            <button class="p-2 rounded hover:bg-gray-100" data-close="1" title="Close">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+          <div class="px-4 py-3 text-sm text-gray-700 space-y-3">
+            <div>
+              <label class="block text-sm mb-1">OAuth Client ID</label>
+              <input id="oauth-client-id" type="text" placeholder="public-client-id" class="w-full p-2 rounded-md bg-white/80 border border-white/40 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <p class="text-xs text-gray-500 mt-1">This must match a client registered with the OAuth server for your SPARQL endpoint host.</p>
+            </div>
+            <div>
+              <label class="block text-sm mb-1">Redirect URI</label>
+              <input id="oauth-redirect-uri" type="text" placeholder="https://your-host/sparql-visualizer.html" class="w-full p-2 rounded-md bg-white/80 border border-white/40 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <p class="text-xs text-gray-500 mt-1">Must be an https URL registered for the client. Defaults to the current page URL if served over https.</p>
+            </div>
+          </div>
+          <div class="px-4 py-3 bg-gray-50 flex items-center justify-end gap-2 border-t border-gray-100">
+            <button id="solid-settings-cancel" class="px-3 py-2 rounded bg-white text-gray-800 border hover:bg-gray-100" data-close="1">Cancel</button>
+            <button id="solid-settings-save" class="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="query-panel" class="fixed top-16 left-2 p-4 z-30 bg-white/60 backdrop-blur-lg rounded-2xl shadow-xl w-[36rem] max-w-[95vw] border border-white/30" style="min-width:36rem; overflow:hidden;">
+        <!-- Close (X) button -->
+        <button id="query-panel-close" title="Hide query panel" class="absolute top-2 right-2 p-2 rounded-full bg-white/80 backdrop-blur-sm shadow-md hover:bg-gray-200 transition-colors border border-white/50">
+            <!-- X icon -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-700">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        </button>
+        <div class="qp-drag-handle mb-2 px-2 py-1 cursor-move text-[11px] text-gray-500 select-none">Drag to move</div>
+        <div class="flex items-start gap-3">
+            <div class="flex-1">
+                <div class="flex items-center justify-between mb-2">
+                    <label class="block text-sm font-semibold text-gray-800">Query Mode</label>
+                    <div id="mode-toggle" class="inline-flex bg-white/70 border border-white/40 rounded-full p-1 shadow-sm">
+                        <button id="mode-basic" class="px-3 py-1 text-sm rounded-full bg-blue-600 text-white">Basic</button>
+                        <button id="mode-advanced" class="px-3 py-1 text-sm rounded-full text-gray-800">Advanced</button>
+                    </div>
+                </div>
+
+                <!-- SPARQL Endpoint selector -->
+                <div class="mb-3">
+                    <label for="sparql-endpoint" class="block text-sm font-medium text-gray-700 mb-1">SPARQL Endpoint</label>
+                    <input id="sparql-endpoint" list="endpoint-list" type="text" placeholder="https://example.org/sparql" value="https://dbpedia.org/sparql"
+                    class="w-full p-2 rounded-md bg-white/80 border border-white/40 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <datalist id="endpoint-list">
+                        <option value="https://dbpedia.org/sparql"></option>
+                        <option value="https://query.wikidata.org/sparql"></option>
+                        <option value="https://linkedbrainz.c4dmpresents.org/sparql"></option>
+                        <option value="https://opendata.org/api/sparql"></option>
+                    </datalist>
+                </div>
+
+                <!-- Basic Mode: WHERE-clause only -->
+                <div id="basic-panel">
+                    <label for="basic-where-input" class="block text-sm font-medium text-gray-700 mb-1">SPARQL Body (Triple Patterns)</label>
+                    <div id="basic-editor" class="rounded-xl bg-white/80 border border-white/40 shadow-inner h-28"></div>
+                    <div class="mt-2 flex items-center gap-3">
+                        <label class="text-sm text-gray-700">LIMIT
+                            <input id="basic-limit" type="number" min="1" max="10000" value="200" class="ml-2 w-24 p-1 rounded-md bg-white/80 border border-white/40 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Advanced Mode: full CONSTRUCT query -->
+                <div id="advanced-panel" class="hidden">
+                    <label for="adv-construct-input" class="block text-sm font-medium text-gray-700 mb-1">Full CONSTRUCT query</label>
+                    <div id="adv-editor" class="rounded-xl bg-white/80 border border-white/40 shadow-inner w-full h-36"></div>
+                </div>
+                <div class="mt-2 flex items-center justify-between">
+                    <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                        <input id="panel-friendly-labels" type="checkbox" class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4" checked>
+                        <span>Use friendly labels</span>
+                        <button id="panel-friendly-labels-gear" type="button" title="Label priority settings"
+                            class="p-1 rounded hover:bg-gray-200">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0-2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                        </button>
+                    </label>
+                    <div class="flex items-center gap-2">
+                        <button id="run-query" class="px-4 py-2 text-sm rounded-full bg-blue-600 text-white shadow-sm hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50">Run Query</button>
+                        <button id="fit-graph" class="px-4 py-2 text-sm rounded-full bg-white/80 text-gray-900 shadow-sm hover:bg-white active:bg-gray-100 border border-white/40">Fit</button>
+                        <button id="clear-graph" class="px-4 py-2 text-sm rounded-full bg-white/80 text-gray-900 shadow-sm hover:bg-white active:bg-gray-100 border border-white/40">Clear</button>
+                    </div>
+                </div>
+                <p class="mt-2 text-xs text-gray-600">Runs against https://dbpedia.org/sparql. Use CONSTRUCT for graph results. Literals appear as small nodes.</p>
+            </div>
+        </div>
+        <!-- Resize handle -->
+        <div id="query-resizer" class="absolute bottom-2 right-2 w-4 h-4 bg-white/80 border border-white/50 rounded shadow cursor-nwse-resize"></div>
+    </div>
+
+    <!-- Top-left launcher to re-open the query panel when hidden -->
+    <button id="query-panel-launcher" title="Show query panel" class="fixed top-4 left-4 p-2 rounded-full bg-white/70 backdrop-blur-sm shadow-md hover:bg-gray-200 transition-colors z-30 hidden">
+        <!-- Panel icon (similar style to right-side icons) -->
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-700">
+            <rect x="3" y="4" width="18" height="16" rx="3" ry="3"></rect>
+            <line x1="3" y1="9" x2="21" y2="9"></line>
+        </svg>
+    </button>
+
+    <div id="graph-container" class="graph-container">
+        <div id="empty-state" class="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div class="bg-white/70 backdrop-blur-md border border-white/40 rounded-2xl px-4 py-3 shadow">
+                <p class="text-sm text-gray-700">Enter a query above and press <span class="font-semibold">Run</span> to visualize results.</p>
+            </div>
+        </div>
+    </div>
+    <div id="tooltip"></div>
+
+    <!-- Watermark -->
+    <div id="watermark" class="fixed bottom-2 right-2 text-[11px] text-gray-500/70 select-none pointer-events-none z-10">
+        OpenLink Software © 2025
+    </div>
+
+    <script>
+        const prefixes = {
+            ':': '#',
+            'schema': 'http://schema.org/',
+            'skos': 'http://www.w3.org/2004/02/skos/core#',
+            'owl': 'http://www.w3.org/2002/07/owl#',
+            'rdf': 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
+            'rdfs': 'http://www.w3.org/2000/01/rdf-schema#',
+            'dbr': 'http://dbpedia.org/resource/',
+            'dbo': 'http://dbpedia.org/ontology/',
+            'dbp': 'http://dbpedia.org/property/',
+            'foaf': 'http://xmlns.com/foaf/0.1/',
+            'dul': 'http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#',
+            'yago': 'http://dbpedia.org/class/yago/',
+            'wd': 'http://www.wikidata.org/entity/',
+            'wdt': 'http://www.wikidata.org/prop/direct/'
+        };
+
+        function expandIri(iri) {
+            if (!iri.includes(':')) return iri;
+            const [prefix, name] = iri.split(':');
+            return (prefixes[prefix] || '') + name;
+        }
+
+        function compactIri(iri) {
+            // Best-effort compaction for labeling and predicate icon mapping
+            if (iri == null) return iri;
+            try {
+                // Support JSON-LD object values with @id
+                if (typeof iri === 'object' && iri && '@id' in iri) iri = iri['@id'];
+                if (typeof iri !== 'string') return '';
+            } catch(_) { return iri; }
+            const mappings = [
+                ['http://dbpedia.org/resource/', 'dbr:'],
+                ['http://dbpedia.org/ontology/', 'dbo:'],
+                ['http://dbpedia.org/property/', 'dbp:'],
+                ['http://www.w3.org/2004/02/skos/core#', 'skos:'],
+                ['http://www.w3.org/2002/07/owl#', 'owl:'],
+                ['http://www.w3.org/1999/02/22-rdf-syntax-ns#', 'rdf:'],
+                ['http://www.w3.org/2000/01/rdf-schema#', 'rdfs:'],
+                ['http://schema.org/', 'schema:'],
+                ['http://xmlns.com/foaf/0.1/', 'foaf:'],
+                ['http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#', 'dul:'],
+                ['http://dbpedia.org/class/yago/', 'yago:'],
+                ['http://www.wikidata.org/entity/', 'wd:'],
+                ['http://www.wikidata.org/prop/direct/', 'wdt:'],
+                ['#', ':']
+            ];
+            for (const [base, pref] of mappings) {
+                if (iri.startsWith(base)) return pref + iri.slice(base.length);
+            }
+            // If already prefixed, keep as-is
+            return iri;
+        }
+
+        function iriLabel(iri) {
+            if (!iri) return '';
+            try {
+                const compact = compactIri(iri);
+                const last = compact.split(/[\/#]/).pop();
+                return decodeURIComponent(last || compact).replace(/_/g, ' ');
+            } catch (e) {
+                return iri;
+            }
+        }
+
+        const originalGraphData = { nodes: [], links: [] };
+
+        let currentGraphData = { nodes: [], links: [] };
+
+        const container = document.getElementById('graph-container');
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        const tooltip = d3.select("#tooltip");
+        const color = d3.scaleOrdinal(d3.schemeCategory10)
+            .domain(['scheme', 'class', 'category', 'role', 'external', 'literal']); // Explicit domain for consistent colors
+
+        const svg = d3.select("#graph-container").append("svg")
+            .attr("width", width).attr("height", height)
+            .attr("viewBox", [0, 0, width, height]);
+
+        const view = svg.append("g");
+        const defs = view.append('defs');
+
+        defs.append('marker')
+            .attr('id', 'arrowhead').attr('viewBox', '-0 -5 10 10').attr('refX', 23).attr('refY', 0)
+            .attr('orient', 'auto').attr('markerWidth', 8).attr('markerHeight', 8).attr('xoverflow', 'visible')
+            .append('svg:path').attr('d', 'M 0,-5 L 10 ,0 L 0,5').attr('fill', '#999');
+
+        // Start-arrow variant for symmetric predicates
+        defs.append('marker')
+            .attr('id', 'arrowhead-start').attr('viewBox', '-10 -5 10 10').attr('refX', -13).attr('refY', 0)
+            .attr('orient', 'auto').attr('markerWidth', 8).attr('markerHeight', 8).attr('xoverflow', 'visible')
+            .append('svg:path').attr('d', 'M -10,0 L 0,5 L 0,-5 Z').attr('fill', '#999');
+
+        // --- DEFINE PREDICATE ICONS ---
+        defs.append('symbol').attr('id', 'icon-sameAs').attr('viewBox', '0 0 24 24')
+            .append('path').attr('fill', 'currentColor')
+            .attr('d', 'M17 7h-4v2h4c1.65 0 3 1.35 3 3s-1.35 3-3 3h-4v2h4c2.76 0 5-2.24 5-5s-2.24-5-5-5zm-6 8H7c-1.65 0-3-1.35-3-3s1.35-3 3-3h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-2zm-1-4h-2v2h2v-2z');
+        defs.append('symbol').attr('id', 'icon-type').attr('viewBox', '0 0 24 24')
+            .append('path').attr('fill', 'currentColor')
+            .attr('d', 'M17.63 5.84C17.27 5.33 16.67 5 16 5L5 5.01C3.9 5.01 3 5.9 3 7v10c0 1.1.9 1.99 2 1.99L16 19c.67 0 1.27-.33 1.63-.84L22 12l-4.37-6.16zM13.41 10.59a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z');
+        defs.append('symbol').attr('id', 'icon-hasTopConcept').attr('viewBox', '0 0 24 24')
+            .append('path').attr('fill', 'currentColor')
+            .attr('d', 'M15 11V5l-3-3-3 3v6H5v10h14V11h-4zm-4-4.59L12.59 5H11v1.59zM18 20h-2v-2h-2v2H8v-6h8v6z');
+        defs.append('symbol').attr('id', 'icon-inScheme').attr('viewBox', '0 0 24 24')
+            .append('path').attr('fill', 'currentColor')
+            .attr('d', 'M19 3H4.99c-1.11 0-1.98.9-1.98 2L3 19c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 12h-4c0 1.66-1.34 3-3 3s-3-1.34-3-3H4.99V5H19v10z');
+        defs.append('symbol').attr('id', 'icon-broader').attr('viewBox', '0 0 24 24')
+            .append('path').attr('fill', 'currentColor')
+            .attr('d', 'M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14l-6-6z');
+        defs.append('symbol').attr('id', 'icon-narrower').attr('viewBox', '0 0 24 24')
+            .append('path').attr('fill', 'currentColor')
+            .attr('d', 'M12 16l6-6-1.4-1.4L12 13.17 7.41 8.59 6 10l6 6z');
+
+        // Generic type-based icons
+        // URI link icon (simple chain)
+        defs.append('symbol').attr('id', 'icon-uri').attr('viewBox', '0 0 24 24')
+            .append('path').attr('fill', 'currentColor')
+            .attr('d', 'M10.59 13.41a1.98 1.98 0 0 0 0-2.82l-1.18-1.18a4 4 0 0 0-5.66 5.66l1.17 1.17a4 4 0 0 0 5.66 0l.59-.59-1.41-1.41-.59.59a2 2 0 1 1-2.83 0L4.59 13a2 2 0 1 1 2.83-2.83l1.17 1.17 1.99 2.07zM13.41 10.59a1.98 1.98 0 0 0 0 2.82l1.18 1.18a4 4 0 0 0 5.66-5.66l-1.17-1.17a4 4 0 0 0-5.66 0l-.59.59 1.41 1.41.59-.59a2 2 0 0 1 2.83 0l1.17-1.17a2 2 0 1 1 2.83 2.83l-1.17 1.17-1.99-2.07z');
+        // String icon: double quotes
+        defs.append('symbol').attr('id', 'icon-string').attr('viewBox', '0 0 24 24')
+            .append('path').attr('fill', 'currentColor')
+            .attr('d', 'M7 7h3v10H7zm7 0h3v10h-3z');
+        // Number icon: hashtag
+        defs.append('symbol').attr('id', 'icon-number').attr('viewBox', '0 0 24 24')
+            .append('path').attr('fill', 'currentColor')
+            .attr('d', 'M10 3L9 7H6l-1 3h3l-1 4H4l-1 3h3l-1 4h3l1-4h4l-1 4h3l1-4h3l1-3h-3l1-4h3l1-3h-3l1-4h-3l-1 4h-4l1-4zM8 10h4l-1 4H7l1-4z');
+        // Boolean icon: checkmark
+        defs.append('symbol').attr('id', 'icon-boolean').attr('viewBox', '0 0 24 24')
+            .append('path').attr('fill', 'currentColor')
+            .attr('d', 'M9 16.2l-3.5-3.5-1.4 1.4L9 19 20 8l-1.4-1.4z');
+        // Date icon: calendar
+        defs.append('symbol').attr('id', 'icon-date').attr('viewBox', '0 0 24 24')
+            .append('path').attr('fill', 'currentColor')
+            .attr('d', 'M7 2h2v2h6V2h2v2h3v18H4V4h3V2zm13 6H4v12h16V8z');
+        // Blank node icon: square brackets []
+        defs.append('symbol').attr('id', 'icon-blank').attr('viewBox', '0 0 24 24')
+            .append('path').attr('fill', 'currentColor')
+            .attr('d', 'M6 5h2v14H6V5zm10 0h2v14h-2V5z');
+
+        const predicateToIcon = {
+            'owl:sameAs': '#icon-uri', 'rdf:type': '#icon-type',
+            'skos:hasTopConcept': '#icon-hasTopConcept', 'skos:inScheme': '#icon-inScheme',
+            'skos:broader': '#icon-broader', 'skos:narrower': '#icon-narrower'
+        };
+
+        function iconForLink(d){
+            // rdf:type always uses tag icon
+            if (d.predicate === 'rdf:type') return '#icon-type';
+            // Find the target node
+            const targetId = (d.target && d.target.id) ? d.target.id : d.target;
+            const tNode = currentGraphData.nodes.find(n => n.id === targetId);
+            if (tNode) {
+                if (tNode.id && typeof tNode.id === 'string' && tNode.id.startsWith('_:')) return '#icon-blank';
+                if (tNode.group === 'literal') {
+                    switch (tNode.literalType) {
+                        case 'number': return '#icon-number';
+                        case 'boolean': return '#icon-boolean';
+                        case 'date': return '#icon-date';
+                        default: return '#icon-string';
+                    }
+                }
+                // IRI node
+                return '#icon-uri';
+            }
+            // Default based on predicate mapping or URI
+            return predicateToIcon[d.predicate] || '#icon-uri';
+        }
+
+        const simulation = d3.forceSimulation()
+            .force("link", d3.forceLink().id(d => d.id))
+            .force("charge", d3.forceManyBody())
+            .force("collision", d3.forceCollide().radius(d => getNodeRadius(d) + 12).iterations(3))
+            .force("center", d3.forceCenter(width / 2, height / 2))
+            .alphaDecay(0.02)
+            .velocityDecay(0.3)
+            .on("tick", ticked);
+
+        let link = view.append("g").attr("class", "links").selectAll(".link-path");
+        let predicateIconGroup = view.append("g").attr("class", "predicate-icons").selectAll(".predicate-icon-group");
+        let predicateLabelGroup = view.append("g").attr("class", "predicate-labels").selectAll(".predicate-label-group");
+        let node = view.append("g").attr("class", "nodes").selectAll(".node");
+        let nodeLabelGroup = view.append("g").attr("class", "labels").selectAll(".node-label-group");
+
+        // rdf:type filter state (select-to-include):
+        // When selectedTypes is empty => show all types. When non-empty => show only selected types.
+        let selectedTypes = new Set();
+        // Property filter state (select-to-include):
+        // When selectedProperties is empty => show all properties.
+        let selectedProperties = new Set();
+        let edgeAnnotationMode = (localStorage.getItem('edgeAnnot') === 'names') ? 'names' : 'icons';
+
+        // Visual constants
+        function getNodeRadius(d){
+            // Slightly larger nodes for better readability
+            return d.group === 'role' ? 22 : (d.group === 'category' ? 18 : (d.group === 'literal' ? 10 : 14));
+        }
+
+        // Arrow inset so marker sits closer to target node edge
+        const ARROW_TARGET_INSET = 3;
+
+function predicateTerm(pred) {
+    try {
+        if (pred == null) return '';
+        // Support JSON-LD object values with @id
+        if (typeof pred === 'object' && '@id' in pred) pred = pred['@id'];
+        if (typeof pred !== 'string') pred = String(pred);
+        // Expand CURIEs to full IRI when possible
+        let iri = pred;
+        if (pred.includes(':') && !pred.startsWith('http')) {
+            iri = expandIri(pred);
+        }
+        // Remove surrounding angle brackets
+        iri = iri.replace(/^</, '').replace(/>$/, '');
+        // If still a CURIE-like, take part after ':'
+        if (!iri.startsWith('http') && /:\w/.test(iri)) return iri.split(':').pop();
+        // Fragment takes precedence
+        const hash = iri.lastIndexOf('#');
+        const slash = iri.lastIndexOf('/');
+        if (hash > -1) return iri.slice(hash + 1);
+        if (slash > -1) return iri.slice(slash + 1);
+        return iri;
+    } catch(_) { return String(pred || ''); }
+}
+
+function normalizePredicate(pred) {
+    try {
+        if (pred == null) return pred;
+        // Support JSON-LD object values with @id
+        if (typeof pred === 'object' && '@id' in pred) pred = pred['@id'];
+        if (typeof pred !== 'string') pred = String(pred);
+        let iri = pred;
+        // Expand CURIE to IRI when possible (dbo:creator -> http://dbpedia.org/ontology/creator)
+        if (iri.includes(':') && !iri.startsWith('http')) iri = expandIri(iri);
+        // Strip < > wrappers
+        iri = iri.replace(/^</, '').replace(/>$/, '');
+        return iri;
+    } catch(_) { return String(pred || ''); }
+}
+
+        // If an IRI is protocol-relative (starts with //), add https: by default for display and opening
+        function addDefaultScheme(iri) {
+            try {
+                if (typeof iri === 'string' && iri.startsWith('//')) return 'https:' + iri;
+                return iri;
+            } catch(_) { return iri; }
+        }
+
+        function updateGraph() {
+            // Filter data based on checkboxes
+            const selectedGroups = new Set();
+            d3.selectAll(".filter-checkbox").each(function (d) { if (d3.select(this).property("checked")) selectedGroups.add(d); });
+
+            // Group filter
+            let filteredNodes = originalGraphData.nodes.filter(d => selectedGroups.size ? selectedGroups.has(d.group) : true);
+
+            // rdf:type filter (selectedTypes empty === include all)
+            const hasTypeFilter = selectedTypes && selectedTypes.size > 0;
+            const hideTypes = !!document.getElementById('show-types-toggle')?.checked; // when checked, hide type nodes/edges
+            if (hasTypeFilter) {
+                filteredNodes = filteredNodes.filter(n => {
+                    // Keep nodes that either have no recorded types or intersect with enabled types
+                    const nodeTypes = (n.types && (n.types instanceof Set ? Array.from(n.types) : n.types)) || [];
+                    const hasTypes = nodeTypes.length > 0;
+                    const isTypeNode = !!selectedTypes && selectedTypes.has(n.id);
+                    if (isTypeNode) return true; // always keep selected class node (subject to "Hide types" later)
+                    if (!hasTypes) return true;  // nodes without rdf:type are unaffected
+                    return nodeTypes.some(t => selectedTypes.has(t));
+                });
+                // Additionally: hide non-selected class nodes so focus remains on selected types
+                filteredNodes = filteredNodes.filter(n => !n.isTypeClass || selectedTypes.has(n.id));
+            }
+            // Additional hide logic for type-class nodes if requested
+            if (hideTypes) {
+                filteredNodes = filteredNodes.filter(n => !n.isTypeClass);
+            }
+            const nodeIds = new Set(filteredNodes.map(d => d.id));
+            // Link filter: by selected types (rdf:type) and selected properties
+            let filteredLinks = originalGraphData.links;
+            if (hasTypeFilter) {
+                filteredLinks = filteredLinks.filter(l => {
+                    const pred = l.predicate;
+                    const targetId = l.target.id || l.target;
+                    if (pred === 'rdf:type' && (!selectedTypes.has(targetId) || hideTypes)) return false;
+                    return true;
+                });
+            }
+            // Property filter (include-only when set non-empty) comparing normalized full IRI
+            if (selectedProperties && selectedProperties.size > 0) {
+                filteredLinks = filteredLinks.filter(l => selectedProperties.has(normalizePredicate(l.predicate)));
+            }
+            filteredLinks = filteredLinks.filter(d => nodeIds.has(d.source.id || d.source) && nodeIds.has(d.target.id || d.target));
+
+            // If property filters are active, limit nodes to those participating in remaining links
+            if (selectedProperties && selectedProperties.size > 0) {
+                const keptIds = new Set();
+                for (const l of filteredLinks) { keptIds.add(l.source.id || l.source); keptIds.add(l.target.id || l.target); }
+                filteredNodes = filteredNodes.filter(n => keptIds.has(n.id));
+            }
+
+            currentGraphData = { nodes: filteredNodes, links: filteredLinks };
+
+            // === NODES ===
+            node = node.data(currentGraphData.nodes, d => d.id);
+            node.exit().remove();
+            node = node.enter().append('circle')
+                .attr('class', 'node')
+                .attr('r', d => getNodeRadius(d))
+                .attr('fill', d => color(d.group))
+                .call(drag(simulation))
+                .on('dblclick', (event, d) => { d.fx = null; d.fy = null; })
+                .on('mouseover', function (event, d) {
+                    if (d.group === 'role') tooltip.style('visibility', 'visible').html(`<strong>${d.name}</strong><br/><strong>Desc:</strong> ${d.description}<br/><strong>Resp:</strong> ${d.responsibilities}`);
+                    else if (d.group === 'literal') tooltip.style('visibility', 'visible').html(`<strong>Literal:</strong> ${d.name}`);
+                    d3.select(this).attr('r', dd => getNodeRadius(dd) * 1.5);
+                })
+                .on('mousemove', event => tooltip.style('top', (event.pageY - 10) + 'px').style('left', (event.pageX + 10) + 'px'))
+                .on('mouseout', function (event, d) {
+                    tooltip.style('visibility', 'hidden');
+                    d3.select(this).attr('r', dd => getNodeRadius(dd));
+                })
+                .on('mouseenter', function(event, d){
+                    if (!hoverFocusEnabled) return;
+                    const el = d3.select(this);
+                    clearTimeout(el.property('hoverTO'));
+                    const to = setTimeout(()=> applyNodeHoverFocus(d), 500);
+                    el.property('hoverTO', to);
+                })
+                .on('mouseleave', function(event, d){
+                    const el = d3.select(this);
+                    clearTimeout(el.property('hoverTO'));
+                    resetHighlight();
+                })
+                .merge(node);
+
+            // === LINKS ===
+            link = link.data(currentGraphData.links, d => `${d.source.id}-${d.target.id}-${d.predicate}`);
+            link.exit().remove();
+            link = link.enter().append('line')
+                .attr('class', 'link-path')
+                // Arrow points toward OBJECT (target). Default: marker-end. If symmetric, add start arrow too.
+                .attr('marker-end', 'url(#arrowhead)')
+                .attr('marker-start', d => isSymmetricPredicate(d.predicate) ? 'url(#arrowhead-start)' : null)
+                .on('mouseenter', function(event, d){
+                    if (!hoverFocusEnabled) return;
+                    const el = d3.select(this);
+                    clearTimeout(el.property('hoverTO'));
+                    const to = setTimeout(()=> applyLinkHoverFocus(d), 500);
+                    el.property('hoverTO', to);
+                })
+                .on('mouseleave', function(event, d){
+                    const el = d3.select(this);
+                    clearTimeout(el.property('hoverTO'));
+                    resetHighlight();
+                })
+                .merge(link);
+
+            // === NODE LABELS ===
+            nodeLabelGroup = nodeLabelGroup.data(currentGraphData.nodes, d => d.id);
+            nodeLabelGroup.exit().remove();
+            const nodeLabelEnter = nodeLabelGroup.enter().append('g')
+                .attr('class', 'node-label-group')
+                .attr('display', d => d.isIri ? null : null)
+                .on('click', (event, d) => { if (d.isIri) { event.stopPropagation(); const iri = addDefaultScheme(expandIri(d.id)); window.open(iri, '_blank'); } })
+                .on('mouseover', (event, d) => {
+                    const iri = d.isIri ? addDefaultScheme(expandIri(d.id)) : '';
+                    tooltip.style('visibility', 'visible').html(d.isIri ? `Open: <strong>${iri}</strong>` : `Literal value`);
+                })
+                .on('mousemove', event => tooltip.style('top', (event.pageY - 10) + 'px').style('left', (event.pageX + 10) + 'px'))
+                .on('mouseout', () => tooltip.style('visibility', 'hidden'));
+            
+            nodeLabelEnter.append('text');
+
+            nodeLabelGroup = nodeLabelEnter.merge(nodeLabelGroup);
+
+            nodeLabelGroup.select('text')
+                .attr('class', d => d.isIri ? 'clickable-label' : null)
+                .attr('dx', 18).attr('dy', 4)
+                .text(d => d.name);
+
+            // === PREDICATE ICONS ===
+            predicateIconGroup = predicateIconGroup.data(currentGraphData.links, d => `${d.source.id}-${d.target.id}-${d.predicate}`);
+            predicateIconGroup.exit().remove();
+            const predicateIconEnter = predicateIconGroup.enter().append('g')
+                .attr('class', 'predicate-icon-group')
+                .on('click', (event, d) => { event.stopPropagation(); const iriRaw = d.predicate.includes(':') ? expandIri(d.predicate) : d.predicate; const iri = addDefaultScheme(iriRaw); window.open(iri, '_blank'); })
+                .on('mouseover', (event, d) => {
+                    const iriRaw = d.predicate.includes(':') ? expandIri(d.predicate) : d.predicate;
+                    const iri = addDefaultScheme(iriRaw);
+                    tooltip.style('visibility', 'visible').html(`Relationship: <strong>${d.predicate}</strong><br/>IRI: ${iri}`);
+                })
+                .on('mousemove', event => tooltip.style('top', (event.pageY - 10) + 'px').style('left', (event.pageX + 10) + 'px'))
+                .on('mouseout', () => tooltip.style('visibility', 'hidden'));
+
+            predicateIconEnter.append('circle').attr('r', 10).attr('fill', '#f9fafb');
+            predicateIconEnter.append('use')
+                .attr('href', d => iconForLink(d))
+                .attr('xlink:href', d => iconForLink(d))
+                .attr('width', 16).attr('height', 16).attr('x', -8).attr('y', -8);
+            
+            predicateIconGroup = predicateIconEnter.merge(predicateIconGroup);
+
+            // === PREDICATE LABELS (names) ===
+            predicateLabelGroup = predicateLabelGroup.data(currentGraphData.links, d => `${d.source.id}-${d.target.id}-${d.predicate}`);
+            predicateLabelGroup.exit().remove();
+            const predicateLabelEnter = predicateLabelGroup.enter().append('g')
+                .attr('class', 'predicate-label-group')
+                .on('click', (event, d) => { event.stopPropagation(); const iriRaw = d.predicate.includes(':') ? expandIri(d.predicate) : d.predicate; const iri = addDefaultScheme(iriRaw); window.open(iri, '_blank'); })
+                .on('mouseover', (event, d) => {
+                    const iriRaw = d.predicate.includes(':') ? expandIri(d.predicate) : d.predicate;
+                    const iri = addDefaultScheme(iriRaw);
+                    tooltip.style('visibility', 'visible').html(`Relationship: <strong>${predicateTerm(d.predicate)}</strong><br/>IRI: ${iri}`);
+                })
+                .on('mousemove', event => tooltip.style('top', (event.pageY - 10) + 'px').style('left', (event.pageX + 10) + 'px'))
+                .on('mouseout', () => tooltip.style('visibility', 'hidden'));
+            predicateLabelEnter.append('rect').attr('class','edge-label-bg').attr('rx',6).attr('ry',6).attr('fill','rgba(249,250,251,0.9)');
+            predicateLabelEnter.append('text').attr('class','edge-label-text').attr('text-anchor','middle').attr('dominant-baseline','central').attr('fill','#1f2937').attr('font-size',11).text(d => predicateTerm(d.predicate));
+            predicateLabelGroup = predicateLabelEnter.merge(predicateLabelGroup);
+
+            // Toggle visibility based on setting
+            predicateIconGroup.attr('display', edgeAnnotationMode === 'icons' ? null : 'none');
+            predicateLabelGroup.attr('display', edgeAnnotationMode === 'names' ? null : 'none');
+
+            // Apply pinned positions from URL (one-shot) before starting simulation
+            if (window.__urlDesiredPositions instanceof Map && window.__appliedPositionsOnce !== true) {
+                try {
+                    for (const n of currentGraphData.nodes) {
+                        const pos = window.__urlDesiredPositions.get(n.id);
+                        if (pos) {
+                            n.fx = pos.x; n.fy = pos.y;
+                            // also set initial x/y so first tick starts nearby
+                            n.x = pos.x; n.y = pos.y;
+                        }
+                    }
+                    window.__appliedPositionsOnce = true;
+                } catch(_) {}
+            }
+
+            simulation.nodes(currentGraphData.nodes);
+            simulation.force('link').links(currentGraphData.links);
+            simulation.alpha(0.9).restart();
+
+            setEmptyStateVisible(currentGraphData.nodes.length === 0);
+        }
+
+        function ticked() {
+            // Arrowhead is at TARGET end: source side shortened, target goes to node center so marker sits at edge end
+            link.attr('x1', d => {
+                    const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y;
+                    const dist = Math.hypot(dx, dy) || 1;
+                    const ux = dx / dist, uy = dy / dist;
+                    return d.source.x + ux * getNodeRadius(d.source);
+                })
+                .attr('y1', d => {
+                    const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y;
+                    const dist = Math.hypot(dx, dy) || 1;
+                    const ux = dx / dist, uy = dy / dist;
+                    return d.source.y + uy * getNodeRadius(d.source);
+                })
+                .attr('x2', d => {
+                    const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y;
+                    const dist = Math.hypot(dx, dy) || 1;
+                    const ux = dx / dist;
+                    const r = getNodeRadius(d.target);
+                    const inset = Math.max(r - ARROW_TARGET_INSET, 0);
+                    return d.target.x - ux * inset;
+                })
+                .attr('y2', d => {
+                    const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y;
+                    const dist = Math.hypot(dx, dy) || 1;
+                    const uy = dy / dist;
+                    const r = getNodeRadius(d.target);
+                    const inset = Math.max(r - ARROW_TARGET_INSET, 0);
+                    return d.target.y - uy * inset;
+                });
+            node.attr('cx', d => d.x)
+                .attr('cy', d => d.y);
+            nodeLabelGroup.attr('transform', d => `translate(${d.x}, ${d.y})`);
+            predicateIconGroup.attr('transform', d => `translate(${(d.source.x + d.target.x) / 2}, ${(d.source.y + d.target.y) / 2})`);
+            // Size label background to text and position at midpoint
+            predicateLabelGroup.each(function(d){
+                const g = d3.select(this);
+                const mx = (d.source.x + d.target.x) / 2;
+                const my = (d.source.y + d.target.y) / 2;
+                const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y;
+                let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                // Keep text upright: flip if angle is beyond 90 degrees
+                if (angle > 90 || angle < -90) angle += 180;
+                g.attr('transform', `translate(${mx}, ${my}) rotate(${angle})`);
+                const text = g.select('text').attr('dy', -8).text(predicateTerm(d.predicate));
+                try {
+                    const bbox = text.node().getBBox();
+                    g.select('rect').attr('x', bbox.x - 6).attr('y', bbox.y - 2).attr('width', bbox.width + 12).attr('height', bbox.height + 4);
+                } catch(_) {}
+            });
+        }
+
+        function drag(simulation) {
+            function dragstarted(event, d) { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }
+            function dragged(event, d) { d.fx = event.x; d.fy = event.y; }
+            function dragended(event, d) { if (!event.active) simulation.alphaTarget(0); try { syncUrlToUi(); } catch(_) {} }
+            return d3.drag()
+                .on('start', dragstarted)
+                .on('drag', dragged)
+                .on('end', dragended);
+        }
+
+        const zoom = d3.zoom().scaleExtent([0.1, 8]).on("zoom", e => view.attr("transform", e.transform));
+        svg.call(zoom).on("dblclick.zoom", null);
+
+        // Center the simulation purely based on container size (no dependency on query panel)
+        function updateSimulationCenter() {
+            const newWidth = container.clientWidth;
+            const newHeight = container.clientHeight;
+            const centerX = newWidth / 2;
+            const centerY = newHeight / 2; // exact middle of the container
+            simulation.force("center", d3.forceCenter(centerX, centerY));
+            simulation.alpha(0.3).restart();
+        }
+
+        // Fit current nodes into the viewport with padding, using zoom transform
+        // yOffsetRatio lets us nudge the viewport slightly upward (negative) or downward (positive)
+        // 'animate' toggles smooth zoom; defaults to false to avoid zoom-in effects on query return
+        function fitGraphToViewport(padding = 8, yOffsetRatio = -0.18, animate = false) {
+            if (!currentGraphData.nodes || currentGraphData.nodes.length === 0) return;
+            const xs = currentGraphData.nodes.map(n => n.x).filter(v => typeof v === 'number');
+            const ys = currentGraphData.nodes.map(n => n.y).filter(v => typeof v === 'number');
+            if (xs.length === 0 || ys.length === 0) return;
+            const x0 = Math.min(...xs), x1 = Math.max(...xs);
+            const y0 = Math.min(...ys), y1 = Math.max(...ys);
+            const bw = Math.max(1, x1 - x0);
+            const bh = Math.max(1, y1 - y0);
+            const w = container.clientWidth, h = container.clientHeight;
+            const scale = Math.min(w / (bw + padding * 2), h / (bh + padding * 2));
+            const cx = (x0 + x1) / 2;
+            const cy = (y0 + y1) / 2;
+            const yNudge = h * yOffsetRatio; // default: stronger upward bias
+            const transform = d3.zoomIdentity
+                .translate(w / 2, h / 2 + yNudge) // center with vertical nudge
+                .scale(scale)
+                .translate(-cx, -cy);
+            if (animate) {
+                svg.transition().duration(250).call(zoom.transform, transform);
+            } else {
+                svg.call(zoom.transform, transform);
+            }
+        }
+
+        function refreshFiltersAndLegend() {
+            const groups = [...new Set(originalGraphData.nodes.map(n => n.group))];
+
+            // Display label mapping for group names
+            function labelGroup(name){
+                return name === 'external' ? 'Entity (Subject)' : name;
+            }
+
+            // Filters
+            const filterContainer = d3.select('#filter-checkboxes');
+            const filterLabel = filterContainer.selectAll('label').data(groups, d => d);
+            const filterEnter = filterLabel.enter().append('label');
+            filterEnter.append('input')
+                .attr('type', 'checkbox')
+                .attr('class', 'filter-checkbox rounded text-blue-600 focus:ring-blue-500')
+                .property('checked', function(d){
+                    // If URL specified desired groups, honor them; else default to true
+                    try { return !window.__urlDesiredGroups || window.__urlDesiredGroups.has(d); } catch(_) { return true; }
+                })
+                .on('change', function(){ updateGraph(); try { syncUrlToUi(); } catch(_) {} });
+            filterEnter.append('span');
+            filterLabel.select('span').text(d => labelGroup(d));
+            filterLabel.exit().remove();
+
+            // Legend
+            const legend = d3.select('#color-legend');
+            const legendItem = legend.selectAll('.legend-item').data(groups, d => d);
+            const legendEnter = legendItem.enter().append('div').attr('class', 'legend-item');
+            legendEnter.append('div').attr('class', 'legend-color-swatch');
+            legendEnter.append('span');
+            legendItem.select('.legend-color-swatch').style('background-color', d => color(d));
+            legendItem.select('span').text(d => labelGroup(d));
+            legendItem.exit().remove();
+
+            // --- rdf:type filter UI (select to include) ---
+            const typeContainer = d3.select('#type-filter-list');
+            if (!typeContainer.empty()) {
+                // Collect all rdf:types found on nodes
+                const allTypes = new Set();
+                for (const n of originalGraphData.nodes) {
+                    const ts = n.types && (n.types instanceof Set ? Array.from(n.types) : n.types);
+                    if (ts && ts.length) {
+                        ts.forEach(t => {
+                            let s = (typeof t === 'string') ? t : compactIri(t);
+                            if (typeof s !== 'string') s = '';
+                            if (s) allTypes.add(s);
+                        });
+                    }
+                }
+                const typeValues = Array.from(allTypes).sort();
+                d3.select('#type-filter-empty').classed('hidden', typeValues.length > 0);
+                const typeSel = typeContainer.selectAll('label').data(typeValues, d => d);
+                const typeEnter = typeSel.enter().append('label').attr('class','inline-flex items-center gap-2');
+                typeEnter.append('input').attr('type','checkbox').attr('class','type-checkbox rounded text-blue-600 focus:ring-blue-500')
+                    .property('checked', function(d){ return selectedTypes.has(d); })
+                    .on('change', function(){
+                        const val = d3.select(this).datum();
+                        if (this.checked) selectedTypes.add(val); else selectedTypes.delete(val);
+                        updateGraph();
+                        try { syncUrlToUi(); } catch(_) {}
+                    });
+                typeEnter.append('span');
+                typeSel.select('span').text(d => d);
+                typeSel.exit().remove();
+            }
+
+            const propContainer = d3.select('#property-filter-list');
+            if (!propContainer.empty()) {
+                // Collect all properties from links
+                const allProps = new Map(); // key: full IRI (normalized), val: raw
+                for (const l of originalGraphData.links) {
+                    if (!l || !l.predicate) continue;
+                    const full = normalizePredicate(l.predicate);
+                    if (!allProps.has(full)) allProps.set(full, l.predicate);
+                }
+                const props = Array.from(allProps.keys()).sort((a,b)=>predicateTerm(a).localeCompare(predicateTerm(b)));
+                d3.select('#property-filter-empty').classed('hidden', props.length > 0);
+                const propSel = propContainer.selectAll('label').data(props, d => d);
+                const propEnter = propSel.enter().append('label').attr('class','inline-flex items-center gap-2');
+                propEnter.append('input')
+                    .attr('type','checkbox')
+                    .attr('class','property-checkbox rounded text-blue-600 focus:ring-blue-500')
+                    .property('checked', function(d){ return selectedProperties.has(d); })
+                    .on('change', function(){
+                        const val = d3.select(this).datum();
+                        if (this.checked) selectedProperties.add(val); else selectedProperties.delete(val);
+                        updateGraph();
+                        try { syncUrlToUi(); } catch(_) {}
+                    });
+                // Visible label shows local term, with full IRI in title tooltip
+                propEnter.append('span')
+                    .attr('title', d => d)
+                    .text(d => predicateTerm(d));
+                // Update existing
+                propSel.select('input').property('checked', d => selectedProperties.has(d))
+                    .on('change', function(){
+                        const val = d3.select(this).datum();
+                        if (this.checked) selectedProperties.add(val); else selectedProperties.delete(val);
+                        updateGraph();
+                        try { syncUrlToUi(); } catch(_) {}
+                    });
+                propSel.select('span').attr('title', d => d).text(d => predicateTerm(d));
+                propSel.exit().remove();
+            }
+
+            // Once per load, if URL specified desired groups, clear the marker
+            if (window.__urlDesiredGroupsApplied !== true && window.__urlDesiredGroups) {
+                window.__urlDesiredGroupsApplied = true;
+            }
+        }
+
+        function setupControls() {
+            d3.select("#charge").on("input", function () {
+                simulation.force("charge").strength(+this.value);
+                simulation.alpha(1).restart();
+                try { syncUrlToUi(); } catch(_) {}
+            });
+
+        // Helper: size Ace editor containers to fill up to the resizer handle
+        function syncEditorHeightsToPanel() {
+            if (!queryPanel) return;
+            const handle = document.getElementById('query-resizer');
+            if (!handle) return;
+            const padding = 8; // breathing room above the handle
+            const handleTop = handle.offsetTop; // relative to panel
+            const basicEl = document.getElementById('basic-editor');
+            const advEl = document.getElementById('adv-editor');
+            const setHeight = (el, editor) => {
+                if (!el) return;
+                const top = el.offsetTop; // relative to panel
+                const target = Math.max(120, handleTop - top - padding);
+                el.style.height = target + 'px';
+                if (editor && typeof editor.resize === 'function') editor.resize();
+            };
+            setHeight(basicEl, basicAce);
+            setHeight(advEl, advAce);
+        }
+
+        // Clamp panel within viewport on window resize
+        function clampPanelToViewport() {
+            const padding = 8;
+            const minW = 576, minH = 220;
+            if (!queryPanel) return;
+            // Adjust width/height to fit viewport
+            const maxW = Math.max(minW, window.innerWidth - padding - Math.max(0, queryPanel.offsetLeft));
+            const maxH = Math.max(minH, window.innerHeight - padding - Math.max(0, queryPanel.offsetTop));
+            const currentW = queryPanel.offsetWidth;
+            const currentH = queryPanel.offsetHeight;
+            const newW = Math.min(Math.max(currentW, minW), maxW);
+            const newH = Math.min(Math.max(currentH, minH), maxH);
+            if (newW !== currentW) queryPanel.style.width = newW + 'px';
+            if (newH !== currentH) queryPanel.style.height = newH + 'px';
+            // Clamp position
+            const maxLeft = Math.max(padding, window.innerWidth - queryPanel.offsetWidth - padding);
+            const maxTop = Math.max(padding, window.innerHeight - queryPanel.offsetHeight - padding);
+            const clampedLeft = Math.min(Math.max(queryPanel.offsetLeft, padding), maxLeft);
+            const clampedTop = Math.min(Math.max(queryPanel.offsetTop, padding), maxTop);
+            queryPanel.style.left = clampedLeft + 'px';
+            queryPanel.style.top = clampedTop + 'px';
+            // After clamping, ensure editors fit to the handle
+            try { syncEditorHeightsToPanel(); } catch(_) {}
+        }
+        window.addEventListener('resize', clampPanelToViewport);
+            d3.select("#link-distance").on("input", function () {
+                simulation.force("link").distance(+this.value);
+                simulation.alpha(1).restart();
+                try { syncUrlToUi(); } catch(_) {}
+            });
+
+            refreshFiltersAndLegend();
+
+            document.getElementById('controls-toggle').addEventListener('click', () => {
+                document.getElementById('controls').classList.toggle('hidden');
+            });
+
+            const controlsPanel = document.getElementById('controls');
+            const controlsHeader = controlsPanel.querySelector('.controls-header');
+            let isDragging = false;
+            let offsetX, offsetY;
+
+            controlsHeader.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                offsetX = e.clientX - controlsPanel.offsetLeft;
+                offsetY = e.clientY - controlsPanel.offsetTop;
+                controlsPanel.style.position = 'absolute';
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                controlsPanel.style.left = `${e.clientX - offsetX}px`;
+                controlsPanel.style.top = `${e.clientY - offsetY}px`;
+            });
+
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+            });
+
+            // Show types toggle wiring
+            const showTypesToggle = document.getElementById('show-types-toggle');
+            if (showTypesToggle) {
+                // Unchecked by default
+                showTypesToggle.checked = false;
+                showTypesToggle.addEventListener('change', () => {
+                    updateGraph();
+                    try { syncUrlToUi(); } catch(_) {}
+                });
+            }
+
+            // Edge annotation setting wiring
+            const annotIcons = document.getElementById('edge-annot-icons');
+            const annotNames = document.getElementById('edge-annot-names');
+            if (annotIcons && annotNames) {
+                annotIcons.checked = edgeAnnotationMode === 'icons';
+                annotNames.checked = edgeAnnotationMode === 'names';
+                const onChange = () => {
+                    edgeAnnotationMode = annotNames.checked ? 'names' : 'icons';
+                    localStorage.setItem('edgeAnnot', edgeAnnotationMode);
+                    updateGraph();
+                    try { syncUrlToUi(); } catch(_) {}
+                };
+                annotIcons.addEventListener('change', onChange);
+                annotNames.addEventListener('change', onChange);
+            }
+
+            // Label priority modal wiring (gear buttons)
+            function ensureLabelPriorityModal(){
+                let modal = document.getElementById('label-priority-modal');
+                if (modal) return modal;
+                const wrapper = document.createElement('div');
+                wrapper.innerHTML = `
+                <div id="label-priority-modal" class="fixed inset-0 z-40 hidden">
+                  <div class="absolute inset-0 bg-black/30" data-close="1"></div>
+                  <div class="absolute inset-0 flex items-center justify-center p-4">
+                    <div class="w-[40rem] max-w-full rounded-2xl bg-white shadow-xl border border-white/40 overflow-hidden">
+                      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                        <h3 class="text-base font-semibold text-gray-800">Friendly Label Priority</h3>
+                        <button id="lp-close" class="p-2 rounded hover:bg-gray-100" title="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+                      </div>
+                      <div id="lp-body" class="px-4 py-3 text-sm text-gray-800 space-y-4"></div>
+                      <div class="px-4 py-3 bg-gray-50 flex items-center justify-between gap-2 border-t border-gray-100">
+                        <div class="text-xs text-gray-500">Drag to reorder. Your preference is saved in this browser.</div>
+                        <div class="flex items-center gap-2">
+                          <button id="lp-reset" class="px-3 py-2 rounded bg-white text-gray-800 border hover:bg-gray-100">Reset</button>
+                          <button id="lp-save" class="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Save</button>
+                          <button id="lp-ok" class="px-3 py-2 rounded bg-gray-700 text-white hover:bg-gray-800">Close</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>`;
+                document.body.appendChild(wrapper.firstElementChild);
+                modal = document.getElementById('label-priority-modal');
+                const close = () => modal.classList.add('hidden');
+                modal.addEventListener('click', (e)=>{ if (e.target.dataset.close === '1') close(); });
+                document.getElementById('lp-close').addEventListener('click', close);
+                document.getElementById('lp-ok').addEventListener('click', close);
+                document.getElementById('lp-reset').addEventListener('click', () => {
+                    try { localStorage.removeItem('labelPriority'); } catch(_) {}
+                    try { reprocessWithLabelSetting(); } catch(_) {}
+                    try { syncUrlToUi(); } catch(_) {}
+                    close();
+                });
+                document.getElementById('lp-save').addEventListener('click', () => {
+                    const list = modal.querySelector('#lp-order');
+                    const items = Array.from(list.querySelectorAll('li[data-key]'));
+                    const newOrder = items.map(li => li.dataset.key);
+                    try { localStorage.setItem('labelPriority', JSON.stringify(newOrder)); } catch(_) {}
+                    try { reprocessWithLabelSetting(); } catch(_) {}
+                    try { syncUrlToUi(); } catch(_) {}
+                    close();
+                });
+                return modal;
+            }
+
+            function openLabelPriorityModal(){
+                const modal = ensureLabelPriorityModal();
+                const body = modal.querySelector('#lp-body');
+                const data = window.__lastLabelResolution;
+                if (!data) {
+                    body.innerHTML = `<p class="text-gray-600">No label resolution data available yet. Run a query to populate labels.</p>`;
+                } else {
+                    const { usedByIri } = data;
+                    let { priority } = data;
+                    // Recompute counts from usedByIri to ensure accuracy
+                    const counts = {};
+                    for (const key of priority) counts[key] = 0;
+                    try {
+                        for (const [, used] of usedByIri.entries()) {
+                            const k = used?.predKey;
+                            if (k && counts[k] !== undefined) counts[k]++;
+                        }
+                    } catch(_) {}
+                    // Build two sections: counts and reorder list
+                    let html = '';
+                    html += `<p class="text-gray-700">Labels are applied in the following priority. The first available for each node is used; lower-priority labels are hidden.</p>`;
+                    html += `<ol class="list-decimal ml-5 space-y-2">`;
+                    for (const key of priority) {
+                        const c = counts?.[key] ?? 0;
+                        // sample up to 5 items
+                        const samples = [];
+                        try {
+                            let i = 0;
+                            for (const [iri, used] of usedByIri.entries()) {
+                                if (used.predKey === key) { samples.push(`${compactIri(iri)}: ${used.val}`); if (++i>=5) break; }
+                            }
+                        } catch(_){ }
+                        html += `<li><span class="font-semibold">${key}</span> — used on <span class="font-mono">${c}</span> node(s)` + (samples.length? `<div class="mt-1 text-xs text-gray-600">Examples: <ul class="list-disc ml-5">${samples.map(s=>`<li>${s}</li>`).join('')}</ul></div>` : '') + `</li>`;
+                    }
+                    html += `</ol>`;
+                    // Reorder UI
+                    html += `<div class="pt-4">
+                        <div class="text-sm font-semibold mb-2">Reorder label priority</div>
+                        <ul id="lp-order" class="divide-y rounded border">
+                          ${priority.map(k => `<li class="flex items-center justify-between px-3 py-2 bg-white hover:bg-gray-50" data-key="${k}" draggable="true"><span>${k}</span><span class="text-xs text-gray-400">drag</span></li>`).join('')}
+                        </ul>
+                      </div>`;
+                    body.innerHTML = html;
+                    // Drag handlers
+                    const list = body.querySelector('#lp-order');
+                    let dragEl = null;
+                    list.addEventListener('dragstart', (e) => {
+                        dragEl = e.target.closest('li[data-key]');
+                        e.dataTransfer.effectAllowed = 'move';
+                        try { e.dataTransfer.setData('text/plain', dragEl.dataset.key); } catch(_) {}
+                    });
+                    list.addEventListener('dragover', (e) => {
+                        e.preventDefault();
+                        const li = e.target.closest('li[data-key]');
+                        if (!li || li === dragEl) return;
+                        const rect = li.getBoundingClientRect();
+                        const before = (e.clientY - rect.top) < rect.height / 2;
+                        list.insertBefore(dragEl, before ? li : li.nextSibling);
+                    });
+                    list.addEventListener('drop', (e) => { e.preventDefault(); });
+                }
+                modal.classList.remove('hidden');
+            }
+
+            const flg = document.getElementById('friendly-labels-gear');
+            const pflg = document.getElementById('panel-friendly-labels-gear');
+            if (flg) flg.addEventListener('click', openLabelPriorityModal);
+            if (pflg) pflg.addEventListener('click', openLabelPriorityModal);
+
+            // Accordion behavior (type and property)
+            const typeHeader = document.getElementById('type-accordion-header');
+            const typeChevron = document.getElementById('type-accordion-chevron');
+            const typeContent = document.getElementById('type-accordion-content');
+            const propHeader = document.getElementById('prop-accordion-header');
+            const propChevron = document.getElementById('prop-accordion-chevron');
+            const propContent = document.getElementById('prop-accordion-content');
+
+            function toggleAccordion(contentEl, chevronEl){
+                const isHidden = contentEl.classList.toggle('hidden');
+                chevronEl.style.transform = isHidden ? 'rotate(-90deg)' : 'rotate(0deg)';
+            }
+            if (typeHeader && typeChevron && typeContent) {
+                // default open
+                // starts closed in DOM with -rotate-90, keep as-is
+                typeHeader.addEventListener('click', () => toggleAccordion(typeContent, typeChevron));
+            }
+            if (propHeader && propChevron && propContent) {
+                // default open
+                // starts closed in DOM with -rotate-90, keep as-is
+                propHeader.addEventListener('click', () => toggleAccordion(propContent, propChevron));
+            }
+
+            // Select all handlers
+            const typeSelectAll = document.getElementById('type-select-all');
+            if (typeSelectAll) {
+                typeSelectAll.addEventListener('click', () => {
+                    // Select all type checkboxes
+                    const labels = d3.select('#type-filter-list').selectAll('label');
+                    const all = new Set(labels.data());
+                    selectedTypes = all;
+                    labels.select('input').property('checked', true);
+                    updateGraph();
+                });
+            }
+            const propSelectAll = document.getElementById('prop-select-all');
+            if (propSelectAll) {
+                propSelectAll.addEventListener('click', () => {
+                    const labels = d3.select('#property-filter-list').selectAll('label');
+                    const all = new Set(labels.data());
+                    selectedProperties = all;
+                    labels.select('input').property('checked', true);
+                    updateGraph();
+                });
+            }
+        }
+
+        setupControls();
+        simulation.force("charge").strength(+d3.select("#charge").node().value);
+        simulation.force("link").distance(+d3.select("#link-distance").node().value);
+        updateGraph();
+        updateSimulationCenter();
+        setEmptyStateVisible(true);
+
+        window.addEventListener('resize', () => {
+            const newWidth = container.clientWidth;
+            const newHeight = container.clientHeight;
+            svg.attr('width', newWidth).attr('height', newHeight).attr('viewBox', [0, 0, newWidth, newHeight]);
+            updateSimulationCenter();
+            // Keep editors sized correctly if query panel size changes with viewport
+            try { syncEditorHeightsToPanel(); } catch(_) {}
+            try { refreshLineEditor('basic-where-input'); } catch(_) {}
+            try { refreshLineEditor('adv-construct-input'); } catch(_) {}
+        });
+
+        // -------- SPARQL INTEGRATION --------
+        // Track Advanced editor custom edits
+        window.__advDirty = false;
+        window.__settingAdvProgrammatically = false;
+        function markAdvDirtyListener(){
+            try {
+                const adv = ace.edit('adv-editor');
+                if (!adv.__dirtyHookInstalled) {
+                    adv.getSession().on('change', function(){
+                        if (window.__settingAdvProgrammatically) return;
+                        window.__advDirty = true;
+                        // Any manual edit in Advanced marks this as a custom query
+                        try { window.__isCustomQuery = true; } catch(_) {}
+                    });
+                    adv.__dirtyHookInstalled = true;
+                }
+            } catch(_) {}
+        }
+        // Install once DOM editors are present
+        setTimeout(markAdvDirtyListener, 0);
+        function extractConstructTriplesFromWhere(whereText) {
+            // Parse SPARQL WHERE patterns to extract triples for CONSTRUCT.
+            // Heuristics:
+            // - Keep triples from top-level and grouped blocks (e.g., OPTIONAL { ... })
+            // - Treat '}' and 'UNION' as statement boundaries (insert implicit '.')
+            // - Ignore FILTER/BIND/MINUS/SERVICE/GRAPH/VALUES keywords but retain inner triples
+            // - Handle shorthand: ?s p1 ?o1 ; p2 ?o2 . and ?s p ?o1 , ?o2 .
+            // - Normalize property paths in predicate for CONSTRUCT by removing trailing +/*/?
+            const triples = [];
+
+            if (!whereText || !whereText.trim()) return triples;
+
+            // Remove nested full queries if any leaked through upstream
+            let text = stripFullQueries(whereText);
+
+            // Remove line breaks for easier scanning, keep spaces
+            text = text.replace(/\s*\n\s*/g, ' ').trim();
+
+            // Heuristic: fix common typo where a property-list semicolon is typed as a colon after an object variable
+            // e.g., "?creator: ?p ?o" -> "?creator; ?p ?o"
+            text = text.replace(/(\?[A-Za-z_][A-Za-z0-9_]*)\s*:\s+(?=\S)/g, '$1; ');
+
+            // Remove GRAPH graphTerm headers (e.g., GRAPH <iri> { ... } or GRAPH ?g { ... }) and keep inner content only
+            text = text.replace(/\bGRAPH\s+(?:<[^>]*>|\?[A-Za-z_][A-Za-z0-9_]*)\s*\{/gi, '{');
+
+            // Remove leading OPTIONAL/GRAPH/SERVICE keywords while keeping their contents (fallback)
+            text = text.replace(/\b(OPTIONAL|GRAPH|SERVICE)\b\s*\{/gi, '{');
+
+            // Treat UNION as boundary by inserting a dot if preceding token looks like triple
+            text = text.replace(/\}\s*UNION\s*\{/gi, '} . {');
+
+            // While scanning, insert an implicit '.' before closing brace '}' when the current buffer looks like a triple
+            const statements = [];
+            let current = '';
+            let inAngleBrackets = false;
+            let inQuotes = false;
+            for (let i = 0; i < text.length; i++) {
+                const ch = text[i];
+                if (ch === '"' && !inAngleBrackets) { inQuotes = !inQuotes; current += ch; continue; }
+                if (inQuotes) { current += ch; continue; }
+                if (ch === '<') { inAngleBrackets = true; current += ch; continue; }
+                if (ch === '>') { inAngleBrackets = false; current += ch; continue; }
+                if ((ch === '}' || ch === '.') && !inAngleBrackets) {
+                    const trimmed = current.trim();
+                    if (trimmed) statements.push(trimmed);
+                    current = '';
+                    continue;
+                }
+                // Drop braces
+                if (ch === '{') continue;
+                current += ch;
+            }
+            if (current.trim()) statements.push(current.trim());
+
+            // Now filter out FILTER/BIND/VALUES, GRAPH, and solution modifiers entirely
+            const controlLead = /^(FILTER|BIND|VALUES|GRAPH\b|GROUP\b|HAVING\b|ORDER\b|LIMIT\b|OFFSET\b)/i;
+
+            function normalizePredicate(pred) {
+                // Remove trailing property path quantifiers for CONSTRUCT
+                return pred.replace(/[+*?]$/,'');
+            }
+
+            for (let raw of statements) {
+                if (!raw || controlLead.test(raw)) continue;
+                // Collapse multiple spaces
+                const stmt = raw.replace(/\s+/g, ' ').trim();
+                if (!stmt) continue;
+
+                const subjMatch = stmt.match(/^(\S+)\s+(.+)$/);
+                if (!subjMatch) continue;
+                const [, subject, poListRaw] = subjMatch;
+
+                // Split predicate-object pairs by semicolon that is not inside quotes/IRIs
+                const poPairs = [];
+                {
+                    let buf = '';
+                    let inIri = false, inQ = false;
+                    for (let i = 0; i < poListRaw.length; i++) {
+                        const c = poListRaw[i];
+                        if (c === '"' && !inIri) { inQ = !inQ; buf += c; continue; }
+                        if (inQ) { buf += c; continue; }
+                        if (c === '<') { inIri = true; buf += c; continue; }
+                        if (c === '>') { inIri = false; buf += c; continue; }
+                        if (c === ';' && !inIri) { poPairs.push(buf.trim()); buf = ''; continue; }
+                        buf += c;
+                    }
+                    if (buf.trim()) poPairs.push(buf.trim());
+                }
+
+                // Helper: truncate at control keywords like FILTER/BIND/VALUES outside quotes/IRIs/parentheses
+                function truncateAtControl(s){
+                    const kw = ['FILTER','BIND','VALUES','MINUS','GRAPH','GROUP','HAVING','ORDER','LIMIT','OFFSET'];
+                    let inIri = false, inQ = false, paren = 0;
+                    for (let i = 0; i < s.length; i++) {
+                        const c = s[i];
+                        if (c === '"' && !inIri) { inQ = !inQ; continue; }
+                        if (inQ) continue;
+                        if (c === '<') { inIri = true; continue; }
+                        if (c === '>') { inIri = false; continue; }
+                        if (c === '(') { paren++; continue; }
+                        if (c === ')') { if (paren>0) paren--; continue; }
+                        if (!inIri && !inQ && paren === 0) {
+                            if (/^[A-Za-z]$/.test(c)) {
+                                // check for keywords starting here
+                                for (const k of kw) {
+                                    if (s.slice(i, i+k.length).toUpperCase() === k) {
+                                        // ensure word boundary
+                                        const before = i === 0 || /\s|[;,{]/.test(s[i-1]);
+                                        const after = i + k.length >= s.length || /\s|[({]/.test(s[i+k.length]);
+                                        if (before && after) return s.slice(0, i).trim();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return s;
+                }
+
+                for (let poPair of poPairs) {
+                    if (!poPair) continue;
+                    const poMatch = poPair.match(/^(\S+)\s+(.+)$/);
+                    if (!poMatch) continue;
+                    let [, predicate, objListRaw] = poMatch;
+                    predicate = normalizePredicate(predicate);
+                    objListRaw = truncateAtControl(objListRaw);
+
+                    // Split objects by commas not in quotes/IRIs
+                    const objects = [];
+                    {
+                        let buf = '';
+                        let inIri = false, inQ = false;
+                        for (let i = 0; i < objListRaw.length; i++) {
+                            const c = objListRaw[i];
+                            if (c === '"' && !inIri) { inQ = !inQ; buf += c; continue; }
+                            if (inQ) { buf += c; continue; }
+                            if (c === '<') { inIri = true; buf += c; continue; }
+                            if (c === '>') { inIri = false; buf += c; continue; }
+                            if (c === ',' && !inIri) { objects.push(buf.trim()); buf=''; continue; }
+                            buf += c;
+                        }
+                        if (buf.trim()) objects.push(buf.trim());
+                    }
+
+                    for (let obj of objects) {
+                        if (!obj) continue;
+                        triples.push(`${subject} ${predicate} ${obj} .`);
+                    }
+                }
+            }
+
+            return triples;
+        }
+
+        // Parse Basic editor input into DEFINE pragmas, PREFIX lines, and the remaining WHERE body
+        function parseBasicInput(whereText){
+            const defines = [];
+            const prefixes = []; // includes PREFIX and BASE lines
+            const body = [];
+            for (const rawLine of whereText.split('\n')){
+                const line = rawLine.replace(/\s+$/,'');
+                const trimmed = line.trim();
+                if (!trimmed) { body.push(line); continue; }
+                if (/^DEFINE\b/i.test(trimmed)) { defines.push(trimmed); continue; }
+                if (/^(PREFIX|BASE)\b/i.test(trimmed)) { prefixes.push(trimmed); continue; }
+                body.push(line);
+            }
+            return { defines, prefixes, body: body.join('\n') };
+        }
+
+        // Extract and remove a standalone LIMIT from a Basic WHERE body
+        // Returns { cleaned, limit } where cleaned has any lines like "LIMIT N" removed
+        function extractInlineLimit(whereBody){
+            let limit;
+            const cleaned = whereBody
+                .split('\n')
+                .filter(line => {
+                    const m = line.trim().match(/^LIMIT\s+(\d+)$/i);
+                    if (m) { limit = parseInt(m[1], 10); return false; }
+                    return true;
+                })
+                .join('\n')
+                .trim();
+            return { cleaned, limit };
+        }
+
+        function buildConstructQueryFromWhere(whereText, limit) {
+            const { defines, prefixes, body } = parseBasicInput(whereText);
+            // Remove inline LIMIT from the Basic body and prefer it over UI limit
+            let { cleaned, limit: inlineLimit } = extractInlineLimit(body);
+
+            // Expand prefixed names that contain parentheses to full IRIs for Virtuoso compatibility in WHERE,
+            // and CURIEs whose local-part ends with a dot (invalid in SPARQL). Only apply outside quotes.
+            function expandPrefixedParensInText(t){
+                if (!t) return t;
+                const parts = t.split(/("(?:[^"\\]|\\.)*")/g);
+                const reParens = /(?<!<)([A-Za-z_][A-Za-z0-9_-]*:(?!\/{2})[^\s;,{}]*\([^\s]*\)[^\s;,{}]*)/g;
+                const reDotEnd = /(?<!<)([A-Za-z_][A-Za-z0-9_-]*:(?!\/{2})[^\s;,{}]*\.)\s/g;
+                for (let i = 0; i < parts.length; i++) {
+                    if (i % 2 === 0) { // only outside quotes
+                        parts[i] = parts[i]
+                          .replace(reParens, (m) => {
+                            try { return `<${expandIri(m)}>`; } catch(_) { return m; }
+                          })
+                          .replace(reDotEnd, (m, token) => {
+                            try { return `<${expandIri(token)}>` + ' '; } catch(_) { return m; }
+                          });
+                    }
+                }
+                return parts.join('');
+            }
+
+            // Cleaned WHERE for output (preserve user text but apply safe CURIE expansions)
+            const cleanedWhere = expandPrefixedParensInText(cleaned);
+
+            // Prefer inline LIMIT from Basic over the UI-provided limit. Keep existing defaulting behavior.
+            const effectiveLimit = (typeof inlineLimit === 'number' && !Number.isNaN(inlineLimit)) ? inlineLimit : limit;
+
+            // Avoid pulling triples from nested full queries into the CONSTRUCT template
+            const triples = extractConstructTriplesFromWhere(stripFullQueries(cleaned));
+            const constructBody = triples.length ? triples.join('\n  ') : '# No direct triple lines detected; relying on WHERE only';
+            const header = [
+                defines.join('\n'),
+                prefixes.join('\n')
+            ].filter(Boolean).join('\n');
+            const headerBlock = header ? header + '\n' : '';
+            return `${headerBlock}CONSTRUCT\n{\n  ${constructBody}\n}\nWHERE\n{\n${cleanedWhere}\n}\nLIMIT ${effectiveLimit}`;
+        }
+
+        // Utility: strip nested full queries (SELECT/CONSTRUCT/ASK/DESCRIBE ... WHERE { ... }) from text,
+        // replacing them with a whitespace placeholder so triple extraction doesn't pull their triples.
+        function stripFullQueries(text){
+            if (!text) return text;
+            const keywords = /(SELECT|CONSTRUCT|ASK|DESCRIBE)\b[\s\S]*?\bWHERE\b/ig;
+            let out = '';
+            let idx = 0;
+            while (idx < text.length) {
+                keywords.lastIndex = idx;
+                const m = keywords.exec(text);
+                if (!m) { out += text.slice(idx); break; }
+                // copy up to match start
+                out += text.slice(idx, m.index);
+                // find balanced braces starting from first '{' after WHERE
+                const afterWhere = m.index + m[0].length;
+                const bracePosRel = text.slice(afterWhere).indexOf('{');
+                if (bracePosRel < 0) { idx = afterWhere; continue; }
+                let i = afterWhere + bracePosRel + 1;
+                let depth = 1;
+                while (i < text.length && depth > 0) {
+                    const ch = text[i++];
+                    if (ch === '{') depth++;
+                    else if (ch === '}') depth--;
+                }
+                // i is now positioned just after the matching '}' that closes the WHERE body
+                // Consume any trailing solution modifiers (GROUP BY, HAVING, ORDER BY, LIMIT, OFFSET)
+                // up to (but not including) the next closing brace '}' which ends the subquery block.
+                let j = i;
+                while (j < text.length) {
+                    const ch = text[j];
+                    if (ch === '}') break; // stop before subquery-closing brace
+                    j++;
+                }
+                // Replace from SELECT start (m.index) through position j with a single space, keep the '}'
+                out += ' ';
+                idx = j; // next loop continues from the closing brace
+            }
+            return out;
+        }
+
+        // Extract WHERE { ... } body and LIMIT from a full SPARQL query using balanced braces.
+        function extractWhereAndLimit(fullQuery){
+            let whereBody = '';
+            let limit = undefined;
+            try {
+                const whereIdx = fullQuery.search(/\bWHERE\b/i);
+                if (whereIdx >= 0) {
+                    const braceStartRel = fullQuery.slice(whereIdx).indexOf('{');
+                    if (braceStartRel >= 0) {
+                        const start = whereIdx + braceStartRel + 1; // after '{'
+                        let depth = 1;
+                        let i = start;
+                        while (i < fullQuery.length && depth > 0) {
+                            const ch = fullQuery[i++];
+                            if (ch === '{') depth++;
+                            else if (ch === '}') depth--;
+                        }
+                        const end = i - 1;
+                        if (depth === 0 && end >= start) {
+                            whereBody = fullQuery.slice(start, end).trim();
+                        }
+                    }
+                }
+                const lm = fullQuery.match(/\bLIMIT\s+(\d+)/i);
+                if (lm) limit = parseInt(lm[1], 10);
+            } catch(_) {}
+            return { whereBody, limit };
+        }
+
+        // Apply a full query to editors: set Advanced to full text; Basic to PROLOG (DEFINE/PREFIX/BASE) + WHERE body; and LIMIT.
+        function applyEditorsFromFullQuery(fullQuery){
+            try {
+                window.__settingAdvProgrammatically = true;
+                ace.edit('adv-editor').setValue(fullQuery, -1);
+            } catch(_) {} finally { window.__settingAdvProgrammatically = false; }
+            // Treat externally loaded query as custom Advanced content
+            try { window.__advDirty = true; } catch(_) {}
+            const { whereBody, limit } = extractWhereAndLimit(fullQuery);
+            // Extract leading DEFINE/PREFIX/BASE lines (prolog)
+            let prolog = '';
+            try {
+                const lines = (fullQuery || '').split(/\r?\n/);
+                const out = [];
+                for (let i = 0; i < lines.length; i++) {
+                    const ln = lines[i];
+                    const t = ln.trim();
+                    if (!t) { out.push(ln); continue; }
+                    if (t.startsWith('#') || /^DEFINE\b/i.test(t) || /^PREFIX\b/i.test(t) || /^BASE\b/i.test(t)) {
+                        out.push(ln);
+                    } else {
+                        break;
+                    }
+                }
+                prolog = out.join('\n').trim();
+            } catch(_) { prolog = ''; }
+            if (whereBody) {
+                const basicText = prolog ? (prolog + '\n' + whereBody) : whereBody;
+                try { ace.edit('basic-editor').setValue(basicText, -1); } catch(_) {}
+            }
+            if (typeof limit === 'number' && !Number.isNaN(limit)) {
+                const limitEl = document.getElementById('basic-limit');
+                if (limitEl) limitEl.value = String(limit);
+            }
+            // Refresh line-number overlays if present
+            try { refreshLineEditor('basic-where-input'); } catch(_) {}
+            try { refreshLineEditor('adv-construct-input'); } catch(_) {}
+        }
+
+        async function runSparqlConstruct() {
+            const btn = document.getElementById('run-query');
+            const merge = false; // merging disabled; each run replaces the graph
+            const endpoint = (document.getElementById('sparql-endpoint')?.value?.trim()) || localStorage.getItem('sparqlEndpoint') || 'https://dbpedia.org/sparql';
+            const mode = getSelectedMode();
+            try { if (typeof window.setQueryMode === 'function') window.setQueryMode(mode); } catch(_){ }
+            let query = '';
+            if (mode === 'basic') {
+                const whereText = ace.edit('basic-editor').getValue();
+                const limit = parseInt(document.getElementById('basic-limit').value, 10) || 200;
+                if (!whereText) return;
+                query = buildConstructQueryFromWhere(whereText, limit);
+                // Keep Advanced editor in sync with the actual query that will run
+                try {
+                    window.__settingAdvProgrammatically = true;
+                    ace.edit('adv-editor').setValue(query, -1);
+                } catch(_) {} finally { window.__settingAdvProgrammatically = false; }
+                // Basic-driven run is not a custom Advanced query
+                try { window.__isCustomQuery = false; window.__advDirty = false; } catch(_) {}
+            } else {
+                query = ace.edit('adv-editor').getValue();
+                // Advanced-driven run is a custom query
+                try { window.__isCustomQuery = true; } catch(_) {}
+            }
+            // Persist the exact query being executed in the address bar
+            try { updateUrlWithQuery(query, mode, mode === 'advanced'); } catch(_){ }
+            try {
+                btn.disabled = true; btn.textContent = 'Running...';
+                const params = new URLSearchParams();
+                params.set('query', query);
+                params.set('format', 'application/ld+json');
+                const hdrs = {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                        'Accept': 'application/ld+json, application/json;q=0.9, */*;q=0.1'
+                    },
+                    body: params.toString()
+                };
+                const tok = getAccessToken();
+                if (tok) hdrs.headers['Authorization'] = `Bearer ${tok}`;
+                const res = await fetch(endpoint, hdrs);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const json = await res.json();
+                // Cache raw JSON-LD for re-processing when toggles change
+                try { window.lastFetchedJsonData = json; } catch(_) {}
+                const graph = jsonldToGraph(json);
+                applyGraphData(graph, merge);
+                refreshFiltersAndLegend();
+                updateGraph();
+                const empty = !(graph.nodes && graph.nodes.length);
+                setEmptyStateVisible(empty);
+                if (empty) {
+                    showToast('No results for this query. Try broadening the WHERE clause or increasing LIMIT.', 'info', 2600);
+                }
+            } catch (e) {
+                alert('SPARQL query failed: ' + e.message);
+            } finally {
+                btn.disabled = false; btn.textContent = 'Run Query';
+            }
+        }
+
+        // Run an explicit SPARQL query string, bypassing editor content
+        async function runSparqlWithQuery(explicitQuery, urlModeOverride) {
+            const btn = document.getElementById('run-query');
+            const endpoint = (document.getElementById('sparql-endpoint')?.value?.trim()) || localStorage.getItem('sparqlEndpoint') || 'https://dbpedia.org/sparql';
+            const mode = urlModeOverride || getSelectedMode();
+            const query = explicitQuery;
+            // Treat explicit runs as custom queries
+            try { window.__isCustomQuery = true; } catch(_) {}
+            try { updateUrlWithQuery(query, mode, true); } catch(_){ }
+            // Update both editors from the explicit full query
+            applyEditorsFromFullQuery(query);
+            try {
+                btn.disabled = true; btn.textContent = 'Running...';
+                const params = new URLSearchParams();
+                params.set('query', query);
+                params.set('format', 'application/ld+json');
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                        'Accept': 'application/ld+json, application/json;q=0.9, */*;q=0.1'
+                    },
+                    body: params.toString()
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                lastFetchedJsonData = data;
+                const graph = jsonldToGraph(data);
+                applyGraphData(graph, false);
+                refreshFiltersAndLegend();
+                updateGraph();
+                const empty = !(graph.nodes && graph.nodes.length);
+                setEmptyStateVisible(empty);
+                if (empty) {
+                    showToast('No results for this query. Try broadening the WHERE clause or increasing LIMIT.', 'info', 2600);
+                } else {
+                    showToast('Query complete', 'success');
+                }
+            } catch (err) {
+                console.error(err);
+                showToast('Query failed', 'error');
+            } finally {
+                btn.disabled = false; btn.textContent = 'Run Query';
+            }
+        }
+
+        function applyGraphData(newGraph, merge) {
+            if (!merge) {
+                originalGraphData.nodes = newGraph.nodes;
+                originalGraphData.links = newGraph.links;
+                // Adapt forces for larger datasets
+                try {
+                    const n = originalGraphData.nodes.length;
+                    // If the URL specified physics (chg/ld), do not override those values
+                    const hasUrlPhysics = !!(window.__urlPhysicsOverrides);
+                    if (!hasUrlPhysics) {
+                        // Stronger repulsion and longer links for readability at most sizes
+                        const baseCharge = n > 1200 ? -90 : n > 800 ? -140 : n > 400 ? -220 : -300;
+                        const baseDistance = n > 1200 ? 80 : n > 800 ? 110 : n > 400 ? 140 : 180;
+                        simulation.force("charge").strength(baseCharge);
+                        simulation.force("link").distance(baseDistance).strength(0.6);
+                        // Sync UI sliders to reflect the new defaults
+                        try {
+                            const ch = document.getElementById('charge'); if (ch) ch.value = String(baseCharge);
+                            const ld = document.getElementById('link-distance'); if (ld) ld.value = String(baseDistance);
+                        } catch(_) {}
+                        simulation.alpha(0.6).restart();
+                    }
+                } catch(_) {}
+                // Refresh filters (types, properties) now that we have new data
+                try { refreshFiltersAndLegend(); } catch(_) {}
+                return;
+            }
+            const byId = new Map(originalGraphData.nodes.map(n => [n.id, n]));
+            for (const n of newGraph.nodes) if (!byId.has(n.id)) byId.set(n.id, n);
+            originalGraphData.nodes = Array.from(byId.values());
+
+            const linkKey = l => `${l.source.id}-${l.target.id}-${l.predicate}`;
+            const existing = new Set(originalGraphData.links.map(l => linkKey({ source: l.source.id || l.source, target: l.target.id || l.target, predicate: l.predicate })));
+            for (const l of newGraph.links) {
+                const k = linkKey(l);
+                if (!existing.has(k)) originalGraphData.links.push(l);
+            }
+        }
+
+        function jsonldToGraph(json) {
+            // Settings
+            const useFriendlyLabels = (document.getElementById('panel-friendly-labels')?.checked)
+                ?? (document.getElementById('friendly-labels-toggle')?.checked)
+                ?? true;
+            const prefLang = (document.getElementById('pref-lang')?.value || 'en').toLowerCase();
+
+            // Parse @context
+            const ctx = (!Array.isArray(json) && json && typeof json === 'object') ? (json['@context'] || {}) : {};
+            const termToIri = new Map();
+            const idTypedTerms = new Set();
+            if (ctx && typeof ctx === 'object') {
+                for (const [term, def] of Object.entries(ctx)) {
+                    if (!term || term === '@vocab') continue;
+                    if (typeof def === 'string') termToIri.set(term, def);
+                    else if (def && typeof def === 'object') {
+                        if (def['@id']) termToIri.set(term, def['@id']);
+                        if (def['@type'] === '@id') idTypedTerms.add(term);
+                    }
+                }
+            }
+
+            const looksLikeIri = (s) => typeof s === 'string' && /^https?:\/\//i.test(s);
+            const xsd = {
+                boolean: ['http://www.w3.org/2001/XMLSchema#boolean'],
+                number: [
+                    'http://www.w3.org/2001/XMLSchema#integer',
+                    'http://www.w3.org/2001/XMLSchema#int',
+                    'http://www.w3.org/2001/XMLSchema#long',
+                    'http://www.w3.org/2001/XMLSchema#short',
+                    'http://www.w3.org/2001/XMLSchema#byte',
+                    'http://www.w3.org/2001/XMLSchema#decimal',
+                    'http://www.w3.org/2001/XMLSchema#float',
+                    'http://www.w3.org/2001/XMLSchema#double'
+                ],
+                date: [
+                    'http://www.w3.org/2001/XMLSchema#date',
+                    'http://www.w3.org/2001/XMLSchema#dateTime',
+                    'http://www.w3.org/2001/XMLSchema#dateTimeStamp'
+                ]
+            };
+            function inferLiteralType(val, dtype){
+                if (dtype) {
+                    if (xsd.boolean.includes(dtype)) return 'boolean';
+                    if (xsd.number.includes(dtype)) return 'number';
+                    if (xsd.date.includes(dtype)) return 'date';
+                }
+                const t = typeof val;
+                if (t === 'number') return 'number';
+                if (t === 'boolean') return 'boolean';
+                // naive ISO date detection
+                if (typeof val === 'string' && /^(\d{4}-\d{2}-\d{2})([Tt ].*)?$/.test(val)) return 'date';
+                return 'string';
+            }
+            const resolvePredIri = (pred) => {
+                if (!pred) return pred;
+                if (looksLikeIri(pred) || pred.includes(':')) return pred; // absolute or CURIE
+                const iri = termToIri.get(pred);
+                return iri || pred;
+            };
+
+            // Label predicates (full + common CURIEs)
+            const LABEL_PREDICATES_FULL = new Set([
+                'http://www.w3.org/2000/01/rdf-schema#label',
+                'http://schema.org/name',
+                'http://schema.org/title',
+                'http://purl.org/dc/elements/1.1/title',
+                'http://purl.org/dc/terms/title',
+                'http://xmlns.com/foaf/0.1/name',
+                'http://www.w3.org/2004/02/skos/core#prefLabel'
+            ]);
+            const LABEL_PREDICATES_CURIE = new Set(['rdfs:label','schema:name','schema:title','dc:title','dct:title','foaf:name','skos:prefLabel']);
+            const isLabelPred = (p) => LABEL_PREDICATES_FULL.has(p) || LABEL_PREDICATES_CURIE.has(compactIri(p));
+
+            // Helper: collect label candidates for a given IRI from a raw JSON-LD value, track predicate
+            function collectLabelsFor(iri, rawVal, predIri) {
+                const add = (val, lang='') => {
+                    if (!val && val !== 0) return;
+                    if (!iriToLabels.has(iri)) iriToLabels.set(iri, []);
+                    iriToLabels.get(iri).push({ val: String(val), lang: (lang || '').toLowerCase(), pred: predIri });
+                };
+                const arr = Array.isArray(rawVal) ? rawVal : [rawVal];
+                for (const v of arr) {
+                    if (v && typeof v === 'object' && '@value' in v) {
+                        add(v['@value'], v['@language'] || '');
+                    } else if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+                        add(v, '');
+                    }
+                }
+            }
+
+            // Pass 1: create nodes and collect label candidates on top-level subjects
+            const nodes = new Map();
+            const links = [];
+            const iriToLabels = new Map(); // iri -> [{val, lang}]
+            const graphArray = Array.isArray(json) ? json : (json['@graph'] || [json]);
+            for (const item of graphArray) {
+                const subjId = item['@id'];
+                if (!subjId) continue;
+                const defaultName = iriLabel(compactIri(subjId));
+                nodes.set(subjId, { id: subjId, name: defaultName, group: 'external', isIri: true });
+                for (const [pred, rawVal] of Object.entries(item)) {
+                    const predIri = resolvePredIri(pred);
+                    if (!isLabelPred(pred) && !isLabelPred(predIri)) continue;
+                    collectLabelsFor(subjId, rawVal, predIri);
+                }
+            }
+
+            // Pass 2: build links, skipping label edges entirely
+            for (const item of graphArray) {
+                const subj = item['@id'];
+                if (!subj) continue;
+                if (!nodes.has(subj)) nodes.set(subj, { id: subj, name: iriLabel(compactIri(subj)), group: 'external', isIri: true });
+
+                const types = item['@type'] ? (Array.isArray(item['@type']) ? item['@type'] : [item['@type']]) : [];
+                for (const t of types) {
+                    if (!t) continue;
+                    let tIri = t;
+                    if (typeof t === 'object' && t && '@id' in t) tIri = t['@id'];
+                    if (typeof tIri !== 'string' || !tIri) continue;
+                    if (!nodes.has(tIri)) nodes.set(tIri, { id: tIri, name: iriLabel(compactIri(tIri)), group: 'external', isIri: true, isTypeClass: true });
+                    else {
+                        const tn = nodes.get(tIri); tn.isTypeClass = true;
+                    }
+                    links.push({ source: subj, target: tIri, predicate: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type' });
+                }
+                // Track rdf:types on the subject node for filters
+                if (!nodes.has(subj)) nodes.set(subj, { id: subj, name: iriLabel(compactIri(subj)), group: 'external', isIri: true });
+                const subjNode = nodes.get(subj);
+                subjNode.types = subjNode.types || new Set();
+                for (const t of types) {
+                    if (!t) continue;
+                    let tIri = t;
+                    if (typeof t === 'object' && t && '@id' in t) tIri = t['@id'];
+                    if (typeof tIri !== 'string' || !tIri) continue;
+                    const comp = compactIri(tIri);
+                    if (comp) subjNode.types.add(comp);
+                }
+
+                function processValue(subjectId, predKey, value) {
+                    const predIri = resolvePredIri(predKey);
+                    // If this is a label predicate, handle specially
+                    if (isLabelPred(predKey) || isLabelPred(predIri)) {
+                        // Always collect labels so IRIs get friendly names
+                        collectLabelsFor(subjectId, value, predIri);
+                        // Additionally: when friendly labels are ON, we still want numeric/date values to be visible in the graph.
+                        // Create edges for numeric/date literal values only.
+                        const vals = Array.isArray(value) ? value : [value];
+                        for (const v of vals) {
+                            if (v && typeof v === 'object' && '@value' in v) {
+                                const litType = inferLiteralType(v['@value'], v['@type']);
+                                if (litType === 'number' || litType === 'date') {
+                                    const litId = `_:lit_${Math.random().toString(36).slice(2)}`;
+                                    nodes.set(litId, { id: litId, name: String(v['@value']), group: 'literal', isIri: false, literalType: litType });
+                                    links.push({ source: subjectId, target: litId, predicate: predIri });
+                                }
+                            } else if (typeof v === 'number') {
+                                const litId = `_:lit_${Math.random().toString(36).slice(2)}`;
+                                nodes.set(litId, { id: litId, name: String(v), group: 'literal', isIri: false, literalType: 'number' });
+                                links.push({ source: subjectId, target: litId, predicate: predIri });
+                            } else if (typeof v === 'string') {
+                                const litType = inferLiteralType(v, undefined);
+                                if (litType === 'date') {
+                                    const litId = `_:lit_${Math.random().toString(36).slice(2)}`;
+                                    nodes.set(litId, { id: litId, name: String(v), group: 'literal', isIri: false, literalType: litType });
+                                    links.push({ source: subjectId, target: litId, predicate: predIri });
+                                }
+                            }
+                        }
+                        // When friendly labels are OFF, we already created edges for all label values above via the same logic
+                        // so simply return here to avoid double-processing.
+                        return;
+                    }
+                    if (Array.isArray(value)) { value.forEach(v => processValue(subjectId, predKey, v)); return; }
+                    if (value && typeof value === 'object') {
+                        if ('@id' in value) {
+                            const objId = value['@id'];
+                            if (!nodes.has(objId)) nodes.set(objId, { id: objId, name: iriLabel(compactIri(objId)), group: 'external', isIri: true });
+                            links.push({ source: subjectId, target: objId, predicate: predIri });
+                            const objTypes = value['@type'] ? (Array.isArray(value['@type']) ? value['@type'] : [value['@type']]) : [];
+                            for (const t of objTypes) {
+                                if (!t) continue;
+                                let tIri = t;
+                                if (typeof t === 'object' && t && '@id' in t) tIri = t['@id'];
+                                if (typeof tIri !== 'string' || !tIri) continue;
+                                if (!nodes.has(tIri)) nodes.set(tIri, { id: tIri, name: iriLabel(compactIri(tIri)), group: 'external', isIri: true });
+                                links.push({ source: objId, target: tIri, predicate: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type' });
+                            }
+                            // Process object properties; collect labels on the object itself
+                            for (const [k, v] of Object.entries(value)) {
+                                if (k === '@id' || k === '@type' || k === '@context') continue;
+                                const kIri = resolvePredIri(k);
+                                if (isLabelPred(k) || isLabelPred(kIri)) {
+                                    // Always collect labels
+                                    collectLabelsFor(objId, v, kIri);
+                                    // But keep numeric/date literal values visible even with friendly labels
+                                    const vals = Array.isArray(v) ? v : [v];
+                                    for (const vv of vals) {
+                                        if (vv && typeof vv === 'object' && '@value' in vv) {
+                                            const litType = inferLiteralType(vv['@value'], vv['@type']);
+                                            if (litType === 'number' || litType === 'date') {
+                                                const litId = `_:lit_${Math.random().toString(36).slice(2)}`;
+                                                nodes.set(litId, { id: litId, name: String(vv['@value']), group: 'literal', isIri: false, literalType: litType });
+                                                links.push({ source: objId, target: litId, predicate: kIri });
+                                            }
+                                        } else if (typeof vv === 'number') {
+                                            const litId = `_:lit_${Math.random().toString(36).slice(2)}`;
+                                            nodes.set(litId, { id: litId, name: String(vv), group: 'literal', isIri: false, literalType: 'number' });
+                                            links.push({ source: objId, target: litId, predicate: kIri });
+                                        } else if (typeof vv === 'string') {
+                                            const litType = inferLiteralType(vv, undefined);
+                                            if (litType === 'date') {
+                                                const litId = `_:lit_${Math.random().toString(36).slice(2)}`;
+                                                nodes.set(litId, { id: litId, name: String(vv), group: 'literal', isIri: false, literalType: litType });
+                                                links.push({ source: objId, target: litId, predicate: kIri });
+                                            }
+                                        }
+                                    }
+                                    continue; // prevent non-numeric label edges when friendly labels are on
+                                }
+                                processValue(objId, k, v);
+                            }
+                            return;
+                        }
+                        if ('@value' in value) {
+                            const litId = `_:lit_${Math.random().toString(36).slice(2)}`;
+                            const literalType = inferLiteralType(value['@value'], value['@type']);
+                            nodes.set(litId, { id: litId, name: String(value['@value']), group: 'literal', isIri: false, literalType });
+                            links.push({ source: subjectId, target: litId, predicate: predIri });
+                            return;
+                        }
+                    }
+                    if (typeof value === 'string' && (idTypedTerms.has(predKey) || looksLikeIri(value))) {
+                        if (!nodes.has(value)) nodes.set(value, { id: value, name: iriLabel(compactIri(value)), group: 'external', isIri: true });
+                        links.push({ source: subjectId, target: value, predicate: predIri });
+                    } else {
+                        const litId = `_:lit_${Math.random().toString(36).slice(2)}`;
+                        const literalType = inferLiteralType(value, undefined);
+                        nodes.set(litId, { id: litId, name: String(value), group: 'literal', isIri: false, literalType });
+                        links.push({ source: subjectId, target: litId, predicate: predIri });
+                    }
+                }
+
+                for (const [pred, val] of Object.entries(item)) {
+                    if (pred === '@id' || pred === '@type' || pred === '@context') continue;
+                    processValue(subj, pred, val);
+                }
+            }
+
+            // Apply best label per IRI using predicate priority and language (now that nested labels have been collected)
+            if (useFriendlyLabels) {
+                const DEFAULT_LABEL_PRIORITY = ['skos:prefLabel','rdfs:label','schema:name','schema:title','foaf:name'];
+                let LABEL_PRIORITY = DEFAULT_LABEL_PRIORITY.slice();
+                try {
+                    const saved = JSON.parse(localStorage.getItem('labelPriority') || '[]');
+                    const allowed = new Set(DEFAULT_LABEL_PRIORITY);
+                    if (Array.isArray(saved) && saved.length && saved.every(k => allowed.has(k))) LABEL_PRIORITY = saved;
+                } catch(_) {}
+                const usedByIri = new Map(); // iri -> { predKey, val }
+                const counts = { 'skos:prefLabel':0,'rdfs:label':0,'schema:name':0,'schema:title':0,'foaf:name':0, 'fallback':0 };
+                for (const [iri, labels] of iriToLabels.entries()) {
+                    const node = nodes.get(iri);
+                    if (!node || !labels.length) continue;
+                    let chosen = null; let chosenPredKey = 'fallback';
+                    for (const key of LABEL_PRIORITY) {
+                        // find labels matching this prioritized predicate (by compact form)
+                        const pool = labels.filter(l => compactIri(l.pred) === key);
+                        if (!pool.length) continue;
+                        const byLang = pool.find(l => (l.lang || '') === prefLang) || pool.find(l => !l.lang) || pool[0];
+                        if (byLang) { chosen = byLang; chosenPredKey = key; break; }
+                    }
+                    if (!chosen) {
+                        // no prioritized predicate matched; fallback to language pref across all labels
+                        chosen = labels.find(l => (l.lang || '') === prefLang) || labels.find(l => !l.lang) || labels[0];
+                        // if we have a predicate, account under its compact name rather than generic fallback
+                        if (chosen && chosen.pred) {
+                            const ck = compactIri(chosen.pred);
+                            if (ck) chosenPredKey = ck;
+                        }
+                    }
+                    if (chosen && chosen.val) {
+                        node.name = chosen.val;
+                        usedByIri.set(iri, { predKey: chosenPredKey, val: chosen.val });
+                        if (counts[chosenPredKey] !== undefined) counts[chosenPredKey]++; else counts.fallback++;
+                    }
+                }
+                // Expose last resolution for modal
+                try { window.__lastLabelResolution = { priority: LABEL_PRIORITY.slice(), usedByIri, counts }; } catch(_) {}
+            }
+
+            // Compact & cleanup
+            const finalNodes = Array.from(nodes.values()).map(n => ({ ...n, id: compactIri(n.id), types: n.types ? new Set(Array.from(n.types)) : new Set() }));
+            let finalLinks = links.map(l => ({ source: compactIri(l.source), target: compactIri(l.target), predicate: compactIri(l.predicate) }));
+            if (useFriendlyLabels) {
+                // Keep label edges to numeric/date literals; drop other label edges
+                const nodeById = new Map(finalNodes.map(n => [n.id, n]));
+                finalLinks = finalLinks.filter(l => {
+                    if (!isLabelPred(l.predicate)) return true;
+                    const t = nodeById.get(l.target);
+                    return !!(t && t.group === 'literal' && (t.literalType === 'number' || t.literalType === 'date'));
+                });
+                const ref = new Set();
+                for (const l of finalLinks) { ref.add(l.source); ref.add(l.target); }
+                for (let i = finalNodes.length - 1; i >= 0; i--) {
+                    const n = finalNodes[i];
+                    if (!ref.has(n.id) && n.isIri === false) finalNodes.splice(i, 1);
+                }
+            }
+            return { nodes: finalNodes, links: finalLinks };
+        }
+
+        function setEmptyStateVisible(visible) {
+            const el = document.getElementById('empty-state');
+            if (!el) return;
+            el.style.display = visible ? '' : 'none';
+        }
+
+        // ------- URL helpers: sync query to address bar and restore on load -------
+        function updateUrlWithQuery(query, mode, customOverride) {
+            const params = new URLSearchParams(window.location.search);
+            if (query) params.set('q', query);
+            const lang = document.getElementById('pref-lang')?.value?.trim();
+            if (lang) params.set('lang', lang); else params.delete('lang');
+            const labels = (document.getElementById('panel-friendly-labels')?.checked) ?? (document.getElementById('friendly-labels-toggle')?.checked);
+            if (labels !== undefined) params.set('labels', labels ? '1' : '0');
+            const hideTypes = document.getElementById('show-types-toggle')?.checked;
+            if (hideTypes !== undefined) params.set('hideTypes', hideTypes ? '1' : '0');
+            if (mode) params.set('mode', mode);
+            // custom: 1 if query is user-provided Advanced and should not be regenerated from Basic; 0 otherwise
+            try {
+                const custom = (typeof customOverride === 'boolean') ? customOverride : (
+                    (typeof window.__isCustomQuery === 'boolean') ? window.__isCustomQuery : (mode === 'advanced')
+                );
+                params.set('custom', custom ? '1' : '0');
+            } catch(_) { params.set('custom', mode === 'advanced' ? '1' : '0'); }
+            const limitVal = parseInt(document.getElementById('basic-limit')?.value, 10);
+            if (!Number.isNaN(limitVal)) params.set('limit', String(limitVal));
+            const service = document.getElementById('sparql-endpoint')?.value?.trim();
+            if (service) params.set('service', service); else params.delete('service');
+            // enabled rdf:types (comma-separated)
+            try {
+                const typesArr = selectedTypes ? Array.from(selectedTypes) : [];
+                if (typesArr.length) params.set('types', typesArr.join(',')); else params.delete('types');
+            } catch(_) {}
+            // enabled properties (comma-separated; normalized)
+            try {
+                const propsArr = selectedProperties ? Array.from(selectedProperties) : [];
+                if (propsArr.length) params.set('props', propsArr.join(',')); else params.delete('props');
+            } catch(_) {}
+            // group filters (checked groups from UI)
+            try {
+                const gs = [];
+                d3.selectAll('#filter-checkboxes input.filter-checkbox').each(function(d){ if (this.checked) gs.push(d); });
+                if (gs.length) params.set('groups', gs.join(',')); else params.delete('groups');
+            } catch(_) {}
+            // physics
+            try {
+                const ch = document.getElementById('charge'); if (ch) params.set('chg', String(ch.value));
+                const ld = document.getElementById('link-distance'); if (ld) params.set('ld', String(ld.value));
+            } catch(_) {}
+            // hover focus
+            try {
+                const hf = document.getElementById('hover-focus-toggle'); if (hf) params.set('hover', hf.checked ? '1' : '0');
+            } catch(_) {}
+            // edge annotations
+            try {
+                const annotMode = (localStorage.getItem('edgeAnnot') === 'names') ? 'names' : (window.edgeAnnotationMode || 'icons');
+                params.set('annot', annotMode === 'names' ? 'names' : 'icons');
+            } catch(_) {}
+            // label priority (only include if custom order set)
+            try {
+                const raw = localStorage.getItem('labelPriority');
+                if (raw) {
+                    const arr = JSON.parse(raw);
+                    if (Array.isArray(arr) && arr.length) params.set('lp', arr.join(',')); else params.delete('lp');
+                } else {
+                    params.delete('lp');
+                }
+            } catch(_) {}
+            // node positions (only for pinned nodes to limit size)
+            try {
+                const MAX_POS = 200; // cap to avoid huge URLs
+                const entries = [];
+                const seen = new Set();
+                for (const n of (currentGraphData?.nodes || [])) {
+                    if (!n || seen.has(n.id)) continue;
+                    if (n.fx != null && n.fy != null) {
+                        // round for compactness
+                        const x = Math.round(n.fx); const y = Math.round(n.fy);
+                        entries.push(`${encodeURIComponent(n.id)}:${x}:${y}`);
+                        seen.add(n.id);
+                        if (entries.length >= MAX_POS) break;
+                    }
+                }
+                if (entries.length) params.set('pos', entries.join('|')); else params.delete('pos');
+            } catch(_) {}
+            const url = `${window.location.pathname}?${params.toString()}`;
+            history.replaceState(null, '', url);
+        }
+
+        function syncUrlToUi() {
+            // If a ?q modal is pending, do not overwrite the address bar based on current editors
+            if (window.__pendingUrlModal) return;
+            const mode = getSelectedMode();
+            let qval = '';
+            // If a custom Advanced query is active, prefer Advanced content for URL regardless of tab
+            if (window.__isCustomQuery === true) {
+                try { qval = ace.edit('adv-editor').getValue(); } catch(_) {}
+            } else if (mode === 'basic') {
+                // Rebuild full CONSTRUCT (including DEFINE/PREFIX) from Basic editor so ?q is complete
+                try {
+                    const whereText = ace.edit('basic-editor').getValue();
+                    const limit = parseInt(document.getElementById('basic-limit').value, 10) || 200;
+                    qval = whereText ? buildConstructQueryFromWhere(whereText, limit) : '';
+                } catch(_) { /* fallback to adv */ }
+            }
+            if (!qval) {
+                try { qval = ace.edit('adv-editor').getValue(); } catch(_) {}
+            }
+            const customFlag = (window.__isCustomQuery === true) || (mode === 'advanced');
+            updateUrlWithQuery(qval, mode, customFlag);
+        }
+
+        // Modal to confirm what to do with a ?q param
+        function ensureQueryParamModal() {
+            let modal = document.getElementById('q-param-modal');
+            if (modal) return modal;
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = `
+            <div id="q-param-modal" class="fixed inset-0 z-40 hidden">
+              <div class="absolute inset-0 bg-black/30"></div>
+              <div class="absolute inset-0 flex items-center justify-center p-4">
+                <div class="w-[34rem] max-w-full rounded-2xl bg-white shadow-xl border border-white/40 overflow-hidden">
+                  <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                    <h3 class="text-base font-semibold text-gray-800">Open query from URL?</h3>
+                    <button id="qpm-close" class="p-2 rounded hover:bg-gray-100" title="Cancel">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                  </div>
+                  <div class="px-4 py-3 text-sm text-gray-700 space-y-2">
+                    <p>This link includes a query (<code>?q=</code>). What would you like to do?</p>
+                    <ul class="list-disc ml-5 text-gray-600">
+                      <li><strong>Run now</strong>: switch to the indicated mode and execute the query.</li>
+                      <li><strong>Add only</strong>: load it into the editor without running.</li>
+                      <li><strong>Cancel</strong>: ignore it and keep your current editor content.</li>
+                    </ul>
+                  </div>
+                  <div class="px-4 py-3 bg-gray-50 flex items-center justify-end gap-2 border-t border-gray-100">
+                    <button id="qpm-cancel" class="px-3 py-2 rounded bg-white text-gray-800 border hover:bg-gray-100">Cancel</button>
+                    <button id="qpm-add" class="px-3 py-2 rounded bg-white text-gray-900 border hover:bg-gray-100">Add only</button>
+                    <button id="qpm-run" class="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Run now</button>
+                  </div>
+                </div>
+              </div>
+            </div>`;
+            document.body.appendChild(wrapper.firstElementChild);
+            return document.getElementById('q-param-modal');
+        }
+
+        function detectModeForQuery(q) {
+            if (!q) return 'advanced';
+            // Normalize plus-encoded spaces that may appear in links
+            let s = ('' + q).replace(/\+/g, ' ');
+            // Trim and strip leading comments and SPARQL prolog (DEFINE/PREFIX/BASE) lines
+            try {
+                s = s.replace(/^\s+/, '');
+                const lines = s.split(/\r?\n/);
+                let i = 0;
+                while (i < lines.length) {
+                    const ln = lines[i].trim();
+                    if (!ln) { i++; continue; }
+                    if (ln.startsWith('#') || /^DEFINE\b/i.test(ln) || /^PREFIX\b/i.test(ln) || /^BASE\b/i.test(ln)) { i++; continue; }
+                    break;
+                }
+                s = lines.slice(i).join('\n');
+            } catch(_) { /* noop */ }
+            const head = s.trim().toUpperCase();
+            if (head.startsWith('CONSTRUCT') || head.startsWith('SELECT') || head.startsWith('DESCRIBE') || head.startsWith('ASK')) {
+                return 'advanced';
+            }
+            return 'basic';
+        }
+
+        function applyUrlParams(setMode) {
+            const params = new URLSearchParams(window.location.search);
+            // If a ?q param is present, set guards immediately so no URL/editor sync will overwrite it
+            let incomingQ = params.get('q');
+            // Normalize plus-encoded spaces for compatibility with links that use '+' for spaces
+            if (incomingQ) {
+                incomingQ = incomingQ.replace(/\+/g, ' ');
+                window.__pendingUrlModal = true;
+                // Mark that the next startup sync should not mirror Basic over Advanced
+                try { window.__loadedFromUrlQ = true; } catch(_) {}
+                // Stash for later initialization in case editors aren't ready yet
+                try { window.__initialUrlQuery = incomingQ; } catch(_) {}
+            }
+            const urlMode = params.get('mode');
+            // Honor custom flag from URL
+            const urlCustom = params.get('custom');
+            if (urlCustom === '1') { try { window.__isCustomQuery = true; } catch(_) {} }
+            // If there is no incoming ?q, it's safe to set the mode immediately.
+            // When ?q is present, defer mode application to the modal handler.
+            if (!incomingQ && (urlMode === 'basic' || urlMode === 'advanced')) {
+                try { setMode(urlMode); } catch(_) {}
+            }
+            // physics
+            let chg = params.get('chg');
+            if (chg === null) chg = params.get('charge'); // legacy key support
+            if (chg !== null) {
+                const chEl = document.getElementById('charge');
+                if (chEl) { chEl.value = chg; try { simulation.force('charge').strength(+chg); simulation.alpha(0.3).restart(); } catch(_) {} }
+                try { window.__urlPhysicsOverrides = true; } catch(_) {}
+            }
+            let ld = params.get('ld');
+            if (ld === null) ld = params.get('linkDist'); // legacy key support
+            if (ld !== null) {
+                const ldEl = document.getElementById('link-distance');
+                if (ldEl) { ldEl.value = ld; try { simulation.force('link').distance(+ld); simulation.alpha(0.3).restart(); } catch(_) {} }
+                try { window.__urlPhysicsOverrides = true; } catch(_) {}
+            }
+            // hover focus
+            const hover = params.get('hover');
+            if (hover !== null) {
+                const el = document.getElementById('hover-focus-toggle');
+                const desired = (hover === '1');
+                if (el) { el.checked = desired; }
+                // Apply later if variable isn't defined yet
+                window.__urlHoverFocus = desired;
+            }
+            // labels
+            const labels = params.get('labels');
+            if (labels !== null) {
+                const fl = document.getElementById('friendly-labels-toggle');
+                const pfl = document.getElementById('panel-friendly-labels');
+                if (fl) fl.checked = labels === '1';
+                if (pfl) pfl.checked = labels === '1';
+            }
+            // label priority from URL (lp=skos:prefLabel,rdfs:label,...)
+            try {
+                const lp = params.get('lp');
+                if (lp) {
+                    const parts = lp.split(',').map(s => s.trim()).filter(Boolean);
+                    const DEFAULT_LABEL_PRIORITY = ['skos:prefLabel','rdfs:label','schema:name','schema:title','foaf:name'];
+                    const allowed = new Set(DEFAULT_LABEL_PRIORITY);
+                    if (parts.length && parts.every(k => allowed.has(k))) {
+                        localStorage.setItem('labelPriority', JSON.stringify(parts));
+                        // If data already fetched, reprocess labels using new priority
+                        try { if (lastFetchedJsonData) { const fresh = jsonldToGraph(lastFetchedJsonData); applyGraphData(fresh, false); refreshFiltersAndLegend(); updateGraph(); } } catch(_) {}
+                    }
+                }
+            } catch(_) {}
+            const limit = params.get('limit');
+            if (limit) {
+                const el = document.getElementById('basic-limit');
+                if (el) el.value = limit;
+            }
+            const service = params.get('service');
+            if (service) {
+                const ep = document.getElementById('sparql-endpoint');
+                if (ep) ep.value = service;
+            }
+            const lang = params.get('lang');
+            if (lang) { const l = document.getElementById('pref-lang'); if (l) l.value = lang; }
+            const hideTypes = params.get('hideTypes');
+            if (hideTypes !== null) { const ht = document.getElementById('show-types-toggle'); if (ht) ht.checked = hideTypes === '1'; }
+            // filters from URL
+            try {
+                const typesList = (params.get('types') || '').split(',').filter(Boolean);
+                selectedTypes = new Set(typesList);
+            } catch(_) {}
+            try {
+                const propsList = (params.get('props') || '').split(',').filter(Boolean);
+                selectedProperties = new Set(propsList);
+            } catch(_) {}
+            try {
+                const groups = (params.get('groups') || '').split(',').filter(Boolean);
+                window.__urlDesiredGroups = groups.length ? new Set(groups) : null;
+                window.__urlDesiredGroupsApplied = false;
+            } catch(_) {}
+            // edge annotations
+            let annot = params.get('annot') || params.get('edgeAnnot'); // legacy key support
+            if (annot === 'names' || annot === 'icons') {
+                window.edgeAnnotationMode = annot;
+                try { localStorage.setItem('edgeAnnot', annot); } catch(_) {}
+                try {
+                    const ai = document.getElementById('edge-annot-icons');
+                    const an = document.getElementById('edge-annot-names');
+                    if (ai && an) { ai.checked = annot === 'icons'; an.checked = annot === 'names'; }
+                } catch(_) {}
+            }
+            // node positions
+            const pos = params.get('pos');
+            if (pos) {
+                try {
+                    const map = new Map();
+                    for (const part of pos.split('|')) {
+                        const [idEnc, xStr, yStr] = part.split(':');
+                        if (!idEnc || xStr == null || yStr == null) continue;
+                        const id = decodeURIComponent(idEnc);
+                        const x = parseFloat(xStr), y = parseFloat(yStr);
+                        if (!Number.isNaN(x) && !Number.isNaN(y)) map.set(id, {x, y});
+                    }
+                    window.__urlDesiredPositions = map;
+                } catch(_) {}
+            }
+            const q = incomingQ;
+            if (q) {
+                const chosenMode = urlMode || detectModeForQuery(q);
+                const modal = ensureQueryParamModal();
+                const show = () => { try { const qp = document.getElementById('query-panel'); if (qp) qp.classList.add('hidden'); const la = document.getElementById('query-panel-launcher'); if (la) la.classList.remove('hidden'); } catch(_) {} modal.classList.remove('hidden'); };
+                const hide = () => modal.classList.add('hidden');
+                // Wire actions
+                const btnRun = modal.querySelector('#qpm-run');
+                const btnAdd = modal.querySelector('#qpm-add');
+                const btnCancel = modal.querySelector('#qpm-cancel');
+                const btnClose = modal.querySelector('#qpm-close');
+                // Set a guard so other UI changes don't overwrite ?q before user decides
+                window.__pendingUrlModal = true;
+                const doAdd = () => {
+                    // Always add the incoming query verbatim to the Advanced editor
+                    try { applyEditorsFromFullQuery(q); } catch(_) {}
+                    // If editors are not initialized yet, remember to apply once they are ready
+                    try { window.__initialUrlQuery = q; } catch(_) {}
+                    // Mark that we've loaded from URL so we don't overwrite Advanced with Basic
+                    window.__loadedFromUrlQ = true;
+                    // Treat as custom if URL says so, or if query looks like a full SPARQL query
+                    try {
+                        if (urlCustom === '1' || detectModeForQuery(q) === 'advanced') window.__isCustomQuery = true;
+                    } catch(_){ }
+                    // Show the requested tab (view only)
+                    try { setMode(chosenMode); } catch(_) {}
+                    try { localStorage.setItem('lastUrlQuery', q); } catch(_) {}
+                    // Keep the address bar in sync with the exact incoming query
+                    try { updateUrlWithQuery(q, chosenMode, true); } catch(_) {}
+                };
+                btnRun.onclick = () => {
+                    doAdd();
+                    hide();
+                    // Release guard before running
+                    window.__pendingUrlModal = false;
+                    // Force run using the Advanced editor content.
+                    // Prevent Basic -> Advanced mirroring from overwriting the Advanced editor we just set.
+                    window.__suppressNextBasicToAdvancedSync = true;
+                    try { setMode('advanced'); } catch(_) {}
+                    setTimeout(() => {
+                        // Execute exactly the URL's query and keep URL mode as chosen
+                        runSparqlWithQuery(q, chosenMode);
+                        // Restore the requested tab after kicking off the run
+                        if (chosenMode && chosenMode !== 'advanced') {
+                            setTimeout(() => { try { setMode(chosenMode); } catch(_) {} }, 50);
+                        }
+                    }, 0);
+                };
+                btnAdd.onclick = () => { doAdd(); hide(); window.__pendingUrlModal = false; try { const qp = document.getElementById('query-panel'); if (qp) qp.classList.remove('hidden'); const la = document.getElementById('query-panel-launcher'); if (la) la.classList.add('hidden'); } catch(_) {} };
+                const doCancel = () => { hide(); window.__pendingUrlModal = false; try { const qp = document.getElementById('query-panel'); if (qp) qp.classList.remove('hidden'); const la = document.getElementById('query-panel-launcher'); if (la) la.classList.add('hidden'); } catch(_) {} };
+                btnCancel.onclick = doCancel;
+                btnClose.onclick = doCancel;
+                show();
+                return false; // do not auto-run
+            }
+            return false;
+        }
+
+        function clearUrlQueryParams() {
+            history.replaceState(null, '', window.location.pathname);
+        }
+
+        document.getElementById('run-query').addEventListener('click', () => { runSparqlConstruct(); });
+        document.getElementById('basic-limit').addEventListener('input', () => { syncAdvancedFromBasic(); syncUrlToUi(); });
+        // Keep URL service param in sync when endpoint changes
+        const epInput = document.getElementById('sparql-endpoint');
+        if (epInput) epInput.addEventListener('input', () => { try { syncUrlToUi(); } catch(_) {} });
+        // Toast helpers
+        function showToast(message, variant = 'info', timeout = 1600) {
+            const t = document.getElementById('toast');
+            const ti = document.getElementById('toast-inner');
+            ti.textContent = message;
+            ti.className = 'px-3 py-2 rounded-lg shadow bg-gray-800 text-white text-sm ' + (variant === 'success' ? 'bg-green-600 text-white' : variant === 'error' ? 'bg-red-600 text-white' : 'bg-gray-800 text-white');
+            t.classList.remove('hidden');
+            clearTimeout(showToast._to);
+            showToast._to = setTimeout(() => t.classList.add('hidden'), timeout);
+        }
+
+        // Cross-browser copy helper: modern API with secure-context check, then two execCommand fallbacks (textarea and contentEditable)
+        async function copyToClipboard(text) {
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(text);
+                    return true;
+                }
+            } catch(_) { /* fall through */ }
+            // Fallback #1: textarea + execCommand
+            try {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.setAttribute('readonly', '');
+                ta.style.position = 'fixed';
+                ta.style.top = '-1000px';
+                ta.style.left = '-1000px';
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                ta.setSelectionRange(0, ta.value.length);
+                const ok = document.execCommand('copy');
+                document.body.removeChild(ta);
+                if (ok) return true;
+            } catch(_) { /* fall through */ }
+            // Fallback #2: contentEditable div (helps on some iOS/Safari cases)
+            try {
+                const div = document.createElement('div');
+                div.contentEditable = 'true';
+                div.style.position = 'fixed';
+                div.style.top = '-1000px';
+                div.style.left = '-1000px';
+                div.textContent = text;
+                document.body.appendChild(div);
+                const range = document.createRange();
+                range.selectNodeContents(div);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+                const ok = document.execCommand('copy');
+                sel.removeAllRanges();
+                document.body.removeChild(div);
+                if (ok) return true;
+            } catch(_) { /* fall through */ }
+            return false;
+        }
+
+        // Floating Copy Link handler under the gearbox
+        document.getElementById('copy-link-fab').addEventListener('click', async () => {
+            const mode = getSelectedMode();
+            let query = '';
+            if (mode === 'basic') {
+                const whereText = (basicAce ? basicAce.getValue() : '').trim();
+                const limit = parseInt(document.getElementById('basic-limit').value, 10) || 200;
+                if (!whereText) return;
+                query = buildConstructQueryFromWhere(whereText, limit);
+            } else {
+                query = (advAce ? advAce.getValue() : '').trim();
+            }
+            if (query) { try { updateUrlWithQuery(query); } catch(_) {} }
+            const urlToCopy = window.location.href;
+            const ok = await copyToClipboard(urlToCopy);
+            const btn = document.getElementById('copy-link-fab');
+            if (ok) {
+                const prevTitle = btn.title; btn.title = 'Copied!';
+                btn.classList.add('ring-2', 'ring-blue-500');
+                setTimeout(() => { btn.title = prevTitle; btn.classList.remove('ring-2', 'ring-blue-500'); }, 800);
+                showToast('Link copied to clipboard', 'success');
+            } else {
+                showToast('Copy failed. You can copy manually: ' + urlToCopy, 'error', 2600);
+            }
+        });
+        document.getElementById('clear-graph').addEventListener('click', () => {
+            originalGraphData.nodes = [];
+            originalGraphData.links = [];
+            refreshFiltersAndLegend();
+            updateGraph();
+            setEmptyStateVisible(true);
+            try { clearUrlQueryParams(); } catch(_) {}
+        });
+
+        // Mode toggle behavior
+        (function setupModeToggle() {
+            const basicBtn = document.getElementById('mode-basic');
+            const advBtn = document.getElementById('mode-advanced');
+            const basicPanel = document.getElementById('basic-panel');
+            const advPanel = document.getElementById('advanced-panel');
+            function setMode(mode) {
+                if (mode === 'basic') {
+                    basicBtn.classList.add('bg-blue-600', 'text-white');
+                    advBtn.classList.remove('bg-blue-600', 'text-white');
+                    advBtn.classList.add('text-gray-800');
+                    advPanel.classList.add('hidden');
+                    basicPanel.classList.remove('hidden');
+                } else {
+                    advBtn.classList.add('bg-blue-600', 'text-white');
+                    basicBtn.classList.remove('bg-blue-600', 'text-white');
+                    basicBtn.classList.add('text-gray-800');
+                    advPanel.classList.remove('hidden');
+                    basicPanel.classList.add('hidden');
+                    // Ensure Advanced shows the latest mirroring of Basic unless suppressed
+                    if (window.__isCustomQuery === true) {
+                        // Skip mirroring; user owns Advanced content
+                        window.__suppressNextBasicToAdvancedSync = true;
+                    } else if (!window.__suppressNextBasicToAdvancedSync) {
+                        try { window.__settingAdvProgrammatically = true; } catch(_) {}
+                        syncAdvancedFromBasic();
+                        try { window.__settingAdvProgrammatically = false; window.__advDirty = false; window.__isCustomQuery = false; } catch(_) {}
+                    } else {
+                        // Clear the one-shot suppression after skipping once
+                        window.__suppressNextBasicToAdvancedSync = false;
+                    }
+                }
+                // Re-center after panel height changes (Basic/Advanced can change height)
+                updateSimulationCenter();
+                // Keep editors in sync with panel height on mode change
+                try { syncEditorHeightsToPanel(); } catch(_) {}
+            }
+            // Expose globally so other actions (Run) can ensure correct tab is visible
+            window.setQueryMode = setMode;
+            // Intercept switching to Basic if Advanced has custom edits
+            function showModeSwitchModal(onProceed){
+                const modal = document.getElementById('mode-switch-modal');
+                if (!modal) { onProceed(); return; }
+                modal.classList.remove('hidden');
+                const closeModal = () => modal.classList.add('hidden');
+                const cancelBtn = document.getElementById('mode-switch-cancel');
+                const proceedBtn = document.getElementById('mode-switch-proceed');
+                const backdrop = modal.querySelector('[data-ms-close]');
+                function cleanup(){
+                    try { cancelBtn.removeEventListener('click', onCancel); } catch(_){ }
+                    try { proceedBtn.removeEventListener('click', onOk); } catch(_){ }
+                    try { backdrop.removeEventListener('click', onCancel); } catch(_){ }
+                }
+                function onCancel(){ cleanup(); closeModal(); }
+                function onOk(){ cleanup(); closeModal(); onProceed(); }
+                if (cancelBtn) cancelBtn.addEventListener('click', onCancel);
+                if (backdrop) backdrop.addEventListener('click', onCancel);
+                if (proceedBtn) proceedBtn.addEventListener('click', onOk);
+            }
+            basicBtn.addEventListener('click', () => {
+                if (window.__advDirty) {
+                    showModeSwitchModal(() => setMode('basic'));
+                } else {
+                    setMode('basic');
+                }
+            });
+            advBtn.addEventListener('click', () => setMode('advanced'));
+            setMode('basic');
+            try {
+                const shouldRun = applyUrlParams(setMode);
+                // If a URL query was loaded into Advanced, do not immediately mirror Basic over it
+                if (!window.__loadedFromUrlQ) {
+                    try { window.__settingAdvProgrammatically = true; } catch(_) {}
+                    syncAdvancedFromBasic();
+                    try { window.__settingAdvProgrammatically = false; window.__advDirty = false; window.__isCustomQuery = false; } catch(_) {}
+                } else {
+                    // One-shot suppression for when the user switches to Advanced next time
+                    window.__suppressNextBasicToAdvancedSync = true;
+                    // Clear the marker so future runs behave normally
+                    window.__loadedFromUrlQ = false;
+                }
+                refreshLineEditor('basic-where-input');
+                refreshLineEditor('adv-construct-input');
+                // Initial alignment
+                syncEditorHeightsToPanel();
+                if (shouldRun) {
+                    // Defer to allow UI to reflect mode changes
+                    setTimeout(() => runSparqlConstruct(), 0);
+                }
+            } catch(_) {}
+        })();
+
+        // Determine which query mode tab is active
+        function getSelectedMode() {
+            const basicBtn = document.getElementById('mode-basic');
+            if (basicBtn && basicBtn.classList.contains('bg-blue-600')) return 'basic';
+            return 'advanced';
+        }
+
+        // ===== OAuth PKCE helpers and Account Menu =====
+        function getAccessToken(){ try { return localStorage.getItem('oauthAccessToken') || ''; } catch(_) { return ''; } }
+        function setAccessToken(tok){ try { localStorage.setItem('oauthAccessToken', tok || ''); } catch(_) {} }
+        function clearAccessToken(){ try { localStorage.removeItem('oauthAccessToken'); } catch(_) {} }
+
+        function baseOriginFromEndpoint(){
+            const endpoint = (document.getElementById('sparql-endpoint')?.value?.trim()) || localStorage.getItem('sparqlEndpoint') || '';
+            try { const u = new URL(endpoint); return `${u.protocol}//${u.host}`; } catch(_) { return ''; }
+        }
+
+        async function discoverOAuthEndpoints(originOverride){
+            const origin = originOverride || baseOriginFromEndpoint();
+            if (!origin) throw new Error('Missing SPARQL endpoint');
+            // Cache per-origin in sessionStorage
+            const cacheKey = `oidc_discovery_${origin}`;
+            try { const cached = sessionStorage.getItem(cacheKey); if (cached) return JSON.parse(cached); } catch(_) {}
+            const wellKnown = `${origin}/.well-known/openid-configuration`;
+            try {
+                showToast(`Discovering OAuth at: ${wellKnown}`, 'info', 1800);
+                const res = await fetch(wellKnown, { headers: { 'Accept': 'application/json' } });
+                if (res.ok) {
+                    const cfg = await res.json();
+                    if (!cfg.authorization_endpoint || !cfg.token_endpoint) throw new Error('Discovery missing endpoints');
+                    const out = {
+                        authorization_endpoint: cfg.authorization_endpoint,
+                        token_endpoint: cfg.token_endpoint,
+                        revocation_endpoint: cfg.revocation_endpoint || ''
+                    };
+                    try { sessionStorage.setItem(cacheKey, JSON.stringify(out)); } catch(_) {}
+                    return out;
+                } else {
+                    throw new Error(`Discovery failed (${res.status})`);
+                }
+            } catch(err) {
+                // CORS fallback via proxy
+                try {
+                    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(wellKnown)}`;
+                    showToast('Direct discovery blocked. Retrying via proxy…', 'info', 1800);
+                    const pRes = await fetch(proxyUrl, { headers: { 'Accept': 'application/json' } });
+                    if (pRes.ok) {
+                        const cfg = await pRes.json();
+                        if (!cfg.authorization_endpoint || !cfg.token_endpoint) throw new Error('Proxy discovery missing endpoints');
+                        const out = {
+                            authorization_endpoint: cfg.authorization_endpoint,
+                            token_endpoint: cfg.token_endpoint,
+                            revocation_endpoint: cfg.revocation_endpoint || ''
+                        };
+                        try { sessionStorage.setItem(cacheKey, JSON.stringify(out)); } catch(_) {}
+                        showToast('Discovery successful via proxy', 'success', 1600);
+                        return out;
+                    }
+                } catch(proxyErr) { console.warn('Proxy discovery failed', proxyErr); }
+            }
+            throw new Error('OIDC discovery failed (direct and proxy).');
+        }
+
+        function randomString(len=64){
+            const arr = new Uint8Array(len);
+            crypto.getRandomValues(arr);
+            return Array.from(arr).map(b => ('0' + b.toString(16)).slice(-2)).join('');
+        }
+        async function sha256(base) { const enc = new TextEncoder(); const data = enc.encode(base); const hash = await crypto.subtle.digest('SHA-256', data); return new Uint8Array(hash); }
+        function base64url(buf){
+            let str = btoa(String.fromCharCode.apply(null, Array.from(buf))); return str.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+        }
+
+        function getClientId(){ try { return localStorage.getItem('oauthClientId') || ''; } catch(_) { return ''; } }
+        function getRedirectUri(){
+            try {
+                const v = localStorage.getItem('oauthRedirectUri');
+                if (v && /^https?:\/\//i.test(v)) return v;
+            } catch(_){ }
+            // Default to current page if served via http(s)
+            if (window.location.protocol === 'http:' || window.location.protocol === 'https:') return window.location.origin + window.location.pathname;
+            return '';
+        }
+
+        async function dynamicRegisterIfAvailable(endpoints){
+            if (!endpoints || !endpoints.registration_endpoint) return null;
+            try {
+                showToast('Registering OAuth client…', 'info', 1600);
+                const regResponse = await fetch(endpoints.registration_endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        client_name: 'SPARQL Visualizer',
+                        redirect_uris: [getRedirectUri()],
+                        grant_types: ['authorization_code'],
+                        token_endpoint_auth_method: 'none'
+                    })
+                });
+                if (!regResponse.ok) return null;
+                const regData = await regResponse.json();
+                return regData?.client_id || null;
+            } catch(_) { return null; }
+        }
+
+        async function startOAuthLogin(){
+            const origin = baseOriginFromEndpoint(); if (!origin) { showToast('Set a valid SPARQL endpoint first', 'error'); return; }
+            // Force fresh discovery each login attempt for this origin
+            try { sessionStorage.removeItem(`oidc_discovery_${origin}`); } catch(_) {}
+            try {
+                const disc = await discoverOAuthEndpoints(origin);
+                const authorize = disc.authorization_endpoint;
+                const redirectUri = getRedirectUri();
+                if (!/^https?:\/\//i.test(redirectUri)) { showToast('Redirect URI must be an http(s) URL (configure in Settings)', 'error'); return; }
+                // Determine client_id via dynamic registration or manual settings
+                let clientId = await dynamicRegisterIfAvailable(disc);
+                if (!clientId) {
+                    clientId = getClientId();
+                }
+                if (!clientId) {
+                    showToast('Provider does not support dynamic registration. Set OAuth Client ID in Settings.', 'error', 4000);
+                    return;
+                }
+                const state = randomString(16);
+                const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
+                const challenge = base64url(await sha256(verifier));
+                sessionStorage.setItem('pkce_verifier', verifier);
+                sessionStorage.setItem('oauth_state', state);
+                // Build rich state like OPAL: include origin and nonce
+                const stateObj = { nonce: state, origin: origin };
+                const encodedState = btoa(JSON.stringify(stateObj));
+                sessionStorage.setItem('oauth_state_nonce', state);
+                sessionStorage.setItem('oauth_client_id', clientId);
+                const url = new URL(authorize);
+                url.searchParams.set('response_type','code');
+                url.searchParams.set('client_id', clientId);
+                url.searchParams.set('redirect_uri', redirectUri);
+                url.searchParams.set('code_challenge', challenge);
+                url.searchParams.set('code_challenge_method','S256');
+                url.searchParams.set('scope','openid profile email');
+                url.searchParams.set('state', encodedState);
+                showToast('Redirecting to authorize…', 'info', 1200);
+                window.location.href = url.toString();
+            } catch (e) {
+                console.error(e);
+                showToast(`OAuth discovery failed: ${e.message}`, 'error', 4000);
+            }
+        }
+
+        async function handleOAuthRedirect(){
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get('code'); const encodedState = params.get('state');
+            if (!code) return;
+            try {
+                // Parse state and validate nonce
+                if (!encodedState) throw new Error('Missing state');
+                let parsed = null;
+                try { parsed = JSON.parse(atob(encodedState)); } catch(_) { throw new Error('Invalid state format'); }
+                const { nonce, origin } = parsed || {};
+                const storedNonce = sessionStorage.getItem('oauth_state_nonce');
+                if (!nonce || nonce !== storedNonce) throw new Error('State nonce mismatch');
+                if (!origin) throw new Error('Missing origin in state');
+                const verifier = sessionStorage.getItem('pkce_verifier');
+                const clientId = sessionStorage.getItem('oauth_client_id');
+                if (!verifier || !clientId) throw new Error('OAuth verifier or client_id missing');
+                const disc = await discoverOAuthEndpoints(origin);
+                const tokenUrl = disc.token_endpoint;
+                const redirectUri = getRedirectUri();
+                const body = new URLSearchParams();
+                body.set('grant_type','authorization_code');
+                body.set('code', code);
+                body.set('redirect_uri', redirectUri);
+                body.set('client_id', clientId);
+                body.set('code_verifier', verifier || '');
+                const res = await fetch(tokenUrl, { method: 'POST', headers: { 'Content-Type':'application/x-www-form-urlencoded' }, body: body.toString() });
+                if (!res.ok) throw new Error('Token exchange failed: ' + res.status);
+                const tok = await res.json();
+                if (tok && tok.access_token) { setAccessToken(tok.access_token); updateAccountUi(true); showToast('Signed in', 'success'); }
+            } catch(err){ console.error(err); showToast('OAuth sign-in failed: ' + err.message, 'error'); }
+            finally {
+                // Clean query params
+                const url = new URL(window.location.href); url.searchParams.delete('code'); url.searchParams.delete('state'); history.replaceState(null,'',url.toString());
+                // Clear transient session data
+                try {
+                    sessionStorage.removeItem('pkce_verifier');
+                    sessionStorage.removeItem('oauth_state');
+                    sessionStorage.removeItem('oauth_state_nonce');
+                } catch(_) {}
+            }
+        }
+
+        function updateAccountUi(isAuthed){
+            const statusEl = document.getElementById('acct-status');
+            const btnLogin = document.getElementById('acct-login');
+            const btnLogout = document.getElementById('acct-logout');
+            if (statusEl) statusEl.textContent = isAuthed ? 'Signed in' : 'Not signed in';
+            if (btnLogin) btnLogin.classList.toggle('hidden', !!isAuthed);
+            if (btnLogout) btnLogout.classList.toggle('hidden', !isAuthed);
+        }
+
+        // Account menu dropdown toggle and outside-click close
+        (function setupAccountMenu(){
+            const btn = document.getElementById('account-button');
+            const menu = document.getElementById('account-menu');
+            if (!btn || !menu) return;
+            btn.addEventListener('click', (e) => { e.stopPropagation(); menu.classList.toggle('hidden'); });
+            document.addEventListener('click', (e) => { if (!menu.classList.contains('hidden')) { const within = menu.contains(e.target) || btn.contains(e.target); if (!within) menu.classList.add('hidden'); } });
+            document.addEventListener('keydown', (e) => { if (e.key === 'Escape') menu.classList.add('hidden'); });
+            const loginBtn = document.getElementById('acct-login');
+            const logoutBtn = document.getElementById('acct-logout');
+            const settingsBtn = document.getElementById('acct-settings');
+            if (loginBtn) loginBtn.addEventListener('click', () => { menu.classList.add('hidden'); startOAuthLogin(); });
+            if (logoutBtn) logoutBtn.addEventListener('click', () => { clearAccessToken(); updateAccountUi(false); menu.classList.add('hidden'); showToast('Signed out', 'info'); });
+            if (settingsBtn) settingsBtn.addEventListener('click', () => {
+                menu.classList.add('hidden');
+                const modal = document.getElementById('solid-settings-modal');
+                const cid = document.getElementById('oauth-client-id');
+                const ruri = document.getElementById('oauth-redirect-uri');
+                if (cid) { cid.value = getClientId() || ''; }
+                if (ruri) { ruri.value = (localStorage.getItem('oauthRedirectUri') || getRedirectUri() || ''); }
+                modal.classList.remove('hidden');
+            });
+            // Modal wiring
+            const modal = document.getElementById('solid-settings-modal');
+            if (modal) {
+                modal.addEventListener('click', (e) => { if (e.target?.dataset?.close) modal.classList.add('hidden'); });
+                const saveBtn = document.getElementById('solid-settings-save');
+                const cancelBtn = document.getElementById('solid-settings-cancel');
+                const cid = document.getElementById('oauth-client-id');
+                const ruri = document.getElementById('oauth-redirect-uri');
+                if (saveBtn) saveBtn.addEventListener('click', () => {
+                    if (cid) localStorage.setItem('oauthClientId', cid.value.trim());
+                    if (ruri) localStorage.setItem('oauthRedirectUri', ruri.value.trim());
+                    modal.classList.add('hidden');
+                    showToast('OAuth settings saved', 'success');
+                });
+                if (cancelBtn) cancelBtn.addEventListener('click', () => modal.classList.add('hidden'));
+            }
+            updateAccountUi(!!getAccessToken());
+            // If redirected back with code, attempt token exchange
+            handleOAuthRedirect();
+        })();
+
+        // Detect symmetric predicates that should render double-headed arrows
+        function isSymmetricPredicate(p) {
+            const S = new Set([
+                'owl:sameAs',
+                'owl:equivalentClass',
+                'owl:equivalentProperty',
+                'owl:disjointWith'
+            ]);
+            return S.has(p);
+        }
+
+        // Update link rendering to include double-headed arrows for symmetric predicates
+        link = link.data(currentGraphData.links, d => `${d.source.id}-${d.target.id}-${d.predicate}`)
+            .join("line")
+            .attr("marker-end", "url(#arrowhead)")
+            .attr("marker-start", d => isSymmetricPredicate(d.predicate) ? "url(#arrowhead-start)" : null);
+
+        // Initialize Ace editors
+        let basicAce, advAce;
+        function initAceEditors(){
+            try {
+                basicAce = ace.edit('basic-editor');
+                basicAce.setTheme('ace/theme/chrome');
+                basicAce.session.setMode('ace/mode/sparql');
+                basicAce.setOptions({
+                    fontSize: '14px',
+                    showPrintMargin: false,
+                    wrap: true,
+                    tabSize: 2,
+                    useSoftTabs: true,
+                });
+                // If a URL-provided query exists, avoid setting defaults; will be applied below
+                const pendingUrlQ = (function(){ try { return window.__initialUrlQuery || localStorage.getItem('lastUrlQuery') || ''; } catch(_){ return ''; } })();
+                if (!basicAce.getValue() && !pendingUrlQ) {
+                    basicAce.setValue(`?movie <http://dbpedia.org/ontology/creator> ?creator.\nFILTER(?creator = <http://dbpedia.org/resource/Spike_Lee>).`, -1);
+                }
+
+                advAce = ace.edit('adv-editor');
+                advAce.setTheme('ace/theme/chrome');
+                advAce.session.setMode('ace/mode/sparql');
+                advAce.setOptions({
+                    fontSize: '14px',
+                    showPrintMargin: false,
+                    wrap: true,
+                    tabSize: 2,
+                    useSoftTabs: true,
+                });
+                if (!advAce.getValue() && !pendingUrlQ) {
+                    advAce.setValue(`CONSTRUCT\n{\n  ?movie <http://dbpedia.org/ontology/creator> ?creator.\n}\nWHERE\n{\n  ?movie <http://dbpedia.org/ontology/creator> ?creator.\n  FILTER(?creator = <http://dbpedia.org/resource/Spike_Lee>).\n}\nLIMIT 200`, -1);
+                }
+
+                // If there is a pending URL query, apply it now to both editors (including DEFINE/PREFIX)
+                if (pendingUrlQ) {
+                    try { window.__settingAdvProgrammatically = true; } catch(_) {}
+                    try { applyEditorsFromFullQuery(pendingUrlQ); } catch(_) {}
+                    try { window.__settingAdvProgrammatically = false; window.__advDirty = true; window.__isCustomQuery = true; } catch(_) {}
+                    try { window.__initialUrlQuery = ''; localStorage.removeItem('lastUrlQuery'); } catch(_) {}
+                }
+
+                // Keep Advanced in sync with Basic body
+                basicAce.session.on('change', () => syncAdvancedFromBasic());
+            } catch(_) {}
+        }
+        initAceEditors();
+
+        
+
+        // Make query panel draggable
+        function makeDraggable(panel, handle) {
+            let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+            handle.onmousedown = dragMouseDown;
+
+            function dragMouseDown(e) {
+                e.preventDefault();
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+                document.onmouseup = closeDragElement;
+                document.onmousemove = elementDrag;
+            }
+
+            function elementDrag(e) {
+                e.preventDefault();
+                pos1 = pos3 - e.clientX;
+                pos2 = pos4 - e.clientY;
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+                const padding = 8;
+                const newTop = panel.offsetTop - pos2;
+                const newLeft = panel.offsetLeft - pos1;
+                const maxLeft = Math.max(padding, window.innerWidth - panel.offsetWidth - padding);
+                const maxTop = Math.max(padding, window.innerHeight - panel.offsetHeight - padding);
+                const clampedLeft = Math.min(Math.max(newLeft, padding), maxLeft);
+                const clampedTop = Math.min(Math.max(newTop, padding), maxTop);
+                panel.style.top = clampedTop + "px";
+                panel.style.left = clampedLeft + "px";
+            }
+
+            function closeDragElement() {
+                document.onmouseup = null;
+                document.onmousemove = null;
+            }
+        }
+        const queryPanel = document.getElementById('query-panel');
+        const queryResizer = document.getElementById('query-resizer');
+        makeDraggable(queryPanel, queryPanel.querySelector('.qp-drag-handle'));
+
+        // Make query panel resizable
+        queryResizer.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            let startX = e.clientX;
+            let startY = e.clientY;
+            let startWidth = queryPanel.offsetWidth;
+            let startHeight = queryPanel.offsetHeight;
+            const basicTA = document.getElementById('basic-where-input');
+            const advTA = document.getElementById('adv-construct-input');
+            const basicEl = document.getElementById('basic-editor');
+            const advEl = document.getElementById('adv-editor');
+            let startBasicHeight = basicEl ? basicEl.offsetHeight : 0;
+            let startAdvHeight = advEl ? advEl.offsetHeight : 0;
+            // Capture dynamic offsets so editor height tracks panel height exactly
+            let basicOffset = startHeight - startBasicHeight; // how much space non-editor content takes in Basic
+            let advOffset = startHeight - startAdvHeight;     // how much space non-editor content takes in Advanced
+
+            function doResize(e) {
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                const padding = 8;
+                const minW = 576, minH = 220;
+                const maxW = Math.max(minW, window.innerWidth - padding - queryPanel.offsetLeft);
+                const maxH = Math.max(minH, window.innerHeight - padding - queryPanel.offsetTop);
+                const newWidth = Math.min(Math.max(startWidth + dx, minW), maxW);
+                const newHeight = Math.min(Math.max(startHeight + dy, minH), maxH);
+                queryPanel.style.width = newWidth + 'px';
+                queryPanel.style.height = newHeight + 'px';
+
+                // Track editors to panel height using the captured offsets
+                const basicTarget = Math.max(80, newHeight - basicOffset);
+                const advTarget = Math.max(80, newHeight - advOffset);
+                if (basicEl) { basicEl.style.height = basicTarget + 'px'; if (basicAce) basicAce.resize(); }
+                if (advEl) { advEl.style.height = advTarget + 'px'; if (advAce) advAce.resize(); }
+            }
+
+            function stopResize() {
+                window.removeEventListener('mousemove', doResize, false);
+                window.removeEventListener('mouseup', stopResize, false);
+            }
+
+            window.addEventListener('mousemove', doResize, false);
+            window.addEventListener('mouseup', stopResize, false);
+        });
+
+        // Keep Advanced query in sync with Basic WHERE clause
+        function syncAdvancedFromBasic() {
+            const whereText = (basicAce ? basicAce.getValue() : '').trim();
+            const limit = parseInt(document.getElementById('basic-limit').value, 10) || 200;
+            if (!advAce) return;
+            advAce.setValue(whereText ? buildConstructQueryFromWhere(whereText, limit) : '', -1);
+        }
+
+        let hoverFocusEnabled = true;
+        const NODE_FADE_OPACITY = 0.15; // for node-hover focus fade
+        const LINK_FADE_OPACITY = 0.15; // for node-hover focus fade
+
+        const hft = document.getElementById('hover-focus-toggle');
+        if (hft) {
+            hoverFocusEnabled = !!hft.checked;
+            hft.addEventListener('change', () => { hoverFocusEnabled = !!hft.checked; if (!hoverFocusEnabled) resetHighlight(); try { syncUrlToUi(); } catch(_) {} });
+        }
+        // Apply any URL-provided hover focus after controls exist
+        if (typeof window.__urlHoverFocus === 'boolean') {
+            hoverFocusEnabled = !!window.__urlHoverFocus;
+            if (hft) hft.checked = hoverFocusEnabled;
+        }
+
+        // ------- Hover focus helpers -------
+        function resetHighlight() {
+            try {
+                link.attr('opacity', 1).attr('display', null);
+                node.attr('opacity', 1).attr('display', null);
+                nodeLabelGroup.attr('opacity', 1).attr('display', null);
+                predicateIconGroup.attr('opacity', 1).attr('display', null);
+            } catch(_) {}
+        }
+        function applyNodeHoverFocus(n) {
+            // fade unrelated nodes/links; keep connected at full opacity
+            const connected = new Set([n.id]);
+            currentGraphData.links.forEach(l => {
+                const s = l.source.id || l.source; const t = l.target.id || l.target;
+                if (s === n.id || t === n.id) { connected.add(s); connected.add(t); }
+            });
+            node.attr('opacity', d => connected.has(d.id) ? 1 : NODE_FADE_OPACITY);
+            nodeLabelGroup.attr('opacity', d => connected.has(d.id) ? 1 : NODE_FADE_OPACITY);
+            link.attr('opacity', d => (d.source.id === n.id || d.target.id === n.id) ? 1 : LINK_FADE_OPACITY);
+            predicateIconGroup.attr('opacity', d => (d.source.id === n.id || d.target.id === n.id) ? 1 : LINK_FADE_OPACITY);
+        }
+        function applyLinkHoverFocus(l) {
+            // show only the hovered link and its two nodes; hide all others
+            const sId = l.source.id; const tId = l.target.id;
+            link.attr('display', d => (d === l) ? null : 'none');
+            predicateIconGroup.attr('display', d => (d === l) ? null : 'none');
+            node.attr('display', d => (d.id === sId || d.id === tId) ? null : 'none');
+            nodeLabelGroup.attr('display', d => (d.id === sId || d.id === tId) ? null : 'none');
+        }
+
+        // Toggle query panel visibility without disrupting state
+        function hideQueryPanel() {
+            if (!queryPanel) return;
+            queryPanel.classList.add('hidden');
+            if (queryPanelLauncher) queryPanelLauncher.classList.remove('hidden');
+        }
+        function showQueryPanel() {
+            if (!queryPanel) return;
+            queryPanel.classList.remove('hidden');
+            if (queryPanelLauncher) queryPanelLauncher.classList.add('hidden');
+            try { syncEditorHeightsToPanel(); } catch(_) {}
+            try { if (basicAce) basicAce.resize(); if (advAce) advAce.resize(); } catch(_) {}
+        }
+        const queryPanelCloseBtn = document.getElementById('query-panel-close');
+        const queryPanelLauncher = document.getElementById('query-panel-launcher');
+        if (queryPanelCloseBtn) queryPanelCloseBtn.addEventListener('click', hideQueryPanel);
+        if (queryPanelLauncher) queryPanelLauncher.addEventListener('click', showQueryPanel);
+
+        let lastFetchedJsonData = null; // store the last raw JSON-LD for re-processing
+
+        // Re-render graph when label preference changes
+        const friendlyLabelsToggle = document.getElementById('friendly-labels-toggle');
+        const panelFriendlyLabels = document.getElementById('panel-friendly-labels');
+        function reprocessWithLabelSetting() {
+            if (lastFetchedJsonData) {
+                const freshData = jsonldToGraph(lastFetchedJsonData);
+                applyGraphData(freshData, false);
+                refreshFiltersAndLegend();
+                updateGraph();
+            }
+        }
+        if (friendlyLabelsToggle) {
+            friendlyLabelsToggle.addEventListener('change', () => {
+                // keep panel checkbox in sync if present
+                if (panelFriendlyLabels) panelFriendlyLabels.checked = !!friendlyLabelsToggle.checked;
+                reprocessWithLabelSetting();
+                try { syncUrlToUi(); } catch(_) {}
+            });
+        }
+        if (panelFriendlyLabels) {
+            panelFriendlyLabels.addEventListener('change', () => {
+                // keep controls toggle in sync if present
+                if (friendlyLabelsToggle) friendlyLabelsToggle.checked = !!panelFriendlyLabels.checked;
+                reprocessWithLabelSetting();
+                try { syncUrlToUi(); } catch(_) {}
+            });
+        }
+
+        const prefLangInput = document.getElementById('pref-lang');
+        if (prefLangInput) {
+            prefLangInput.value = localStorage.getItem('prefLang') || 'en';
+            prefLangInput.addEventListener('change', () => {
+                localStorage.setItem('prefLang', prefLangInput.value.trim());
+                if (lastFetchedJsonData) {
+                    const freshData = jsonldToGraph(lastFetchedJsonData);
+                    applyGraphData(freshData, false);
+                    refreshFiltersAndLegend();
+                    updateGraph();
+                }
+                try { syncUrlToUi(); } catch(_) {}
+            });
+        }
+    </script>
+</body>
+
+</html>
