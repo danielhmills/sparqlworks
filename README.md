@@ -3,6 +3,9 @@
 <img src="https://www.openlinksw.com/data/screenshots/sparql-works-example.png">
 
 **SPARQLWorks** is a lightweight, browser‑only web application that lets you compose SPARQL queries and instantly visualise the results as a force‑directed graph.  It is designed to be **loosely coupled** – there is no backend server, no build step, and it works with any public SPARQL endpoint that supports SPARQL `CONSTRUCT` queries.
+
+* [Try it out here!](http://www.openlinksw.com/sparqlworks)
+
 ---
 
 ## Table of Contents
