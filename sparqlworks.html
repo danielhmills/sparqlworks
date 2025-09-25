@@ -361,6 +361,24 @@
                 <label for="pref-lang" class="block text-sm text-gray-700 mb-1">Preferred Language</label>
                 <input id="pref-lang" type="text" placeholder="e.g., en, fr, de" class="w-full p-1 rounded-md bg-white/80 border border-white/40 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
+            <div class="control-group mb-4">
+                <label class="block text-sm font-semibold text-gray-800 mb-2">URL format</label>
+                <div class="flex flex-col gap-2 text-sm">
+                    <label class="inline-flex items-center gap-2">
+                        <input type="radio" name="url-format" id="url-format-default" value="default" class="text-blue-600 focus:ring-blue-500" />
+                        <span>Default — open IRI directly</span>
+                    </label>
+                    <label class="inline-flex items-center gap-2">
+                        <input type="radio" name="url-format" id="url-format-virtuoso" value="virtuoso" class="text-blue-600 focus:ring-blue-500" />
+                        <span>Virtuoso Entity Description</span>
+                    </label>
+                    <div class="mt-1">
+                        <label for="describe-base-input" class="block text-xs text-gray-600 mb-1">Describe base (editable)</label>
+                        <input id="describe-base-input" type="text" placeholder="http(s)://host/describe/?uri=" class="w-full p-2 rounded-md bg-white/80 border border-white/40 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <p class="text-[11px] text-gray-500 mt-1">Defaults to the current SPARQL endpoint's host. Final URL built as: base + encodeURIComponent(IRI).</p>
+                    </div>
+                </div>
+            </div>
             <hr class="my-4">
             <!-- Type filter accordion (moved above Filter by Type) -->
             <div class="type-filter-group">
@@ -822,6 +840,89 @@ function normalizePredicate(pred) {
             } catch(_) { return iri; }
         }
 
+        // === URL Format Preference ===
+        // Controls how entity/predicate IRIs are opened from the graph
+        // Options:
+        // - default: open the expanded IRI directly
+        // - virtuoso: open the Virtuoso Entity Description URL derived from the SPARQL endpoint
+        let urlFormat = (function(){ try { return localStorage.getItem('urlFormat') || 'default'; } catch(_) { return 'default'; } })();
+        // Mirror onto window for code paths that read from window.urlFormat
+        try { window.urlFormat = urlFormat; } catch(_) {}
+        let describeBase = (function(){
+            try {
+                const stored = localStorage.getItem('describeBase');
+                if (stored) return stored;
+            } catch(_) {}
+            try {
+                const ep = document.getElementById('sparql-endpoint')?.value || '';
+                return deriveDescribeBaseFromEndpoint(ep);
+            } catch(_) { return ''; }
+        })();
+        // Mirror onto window for code paths that read from window.describeBase
+        try { window.describeBase = describeBase; } catch(_) {}
+
+        function deriveDescribeBaseFromEndpoint(endpointUrl) {
+            try {
+                if (!endpointUrl) return '';
+                const u = new URL(endpointUrl, window.location.href);
+                // Use the endpoint origin; ignore its path
+                const origin = u.origin;
+                return origin.replace(/\/+$/, '') + '/describe/?uri=';
+            } catch(_) {
+                return '';
+            }
+        }
+
+        function normalizeDescribeBase(val) {
+            try {
+                if (!val) return '';
+                let v = String(val).trim();
+                // If user pasted a SPARQL endpoint instead of a describe base, derive
+                if (!/describe\/?\?/.test(v)) {
+                    try { return deriveDescribeBaseFromEndpoint(v); } catch(_) {}
+                }
+                // Ensure it ends with uri=
+                if (!/uri=\s*$/i.test(v)) {
+                    // If it already has query params, ensure uri= is last
+                    if (v.includes('?')) {
+                        if (!/([&?])uri=/.test(v)) {
+                            v = v.replace(/[#?]$/, '');
+                            v += (v.includes('?') ? '&' : '?') + 'uri=';
+                        } else if (!/uri=\s*$/i.test(v)) {
+                            // If uri= exists but has value, strip value
+                            v = v.replace(/uri=[^&#]*/i, 'uri=');
+                        }
+                    } else {
+                        v = v.replace(/\/+$/, '') + '/?uri=';
+                    }
+                }
+                return v;
+            } catch(_) { return val; }
+        }
+
+        function makeEntityUrl(rawIri) {
+            try {
+                const expanded = addDefaultScheme(expandIri(rawIri));
+                if (urlFormat !== 'virtuoso') return expanded;
+                const base = normalizeDescribeBase(describeBase || deriveDescribeBaseFromEndpoint(document.getElementById('sparql-endpoint')?.value || ''));
+                if (!base) return expanded;
+                return base + encodeURIComponent(expanded);
+            } catch(_) { return rawIri; }
+        }
+
+        // Update only urlfmt/describe in the address bar without touching other params
+        function updateUrlFormatParamsOnly() {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const fmt = (window.urlFormat === 'virtuoso') ? 'virtuoso' : 'default';
+                params.set('urlfmt', fmt);
+                const db = window.describeBase || '';
+                if (fmt === 'virtuoso' && db) params.set('describe', db); else params.delete('describe');
+                const url = `${window.location.pathname}?${params.toString()}`;
+                history.replaceState(null, '', url);
+            } catch(_) {}
+        }
+
         function updateGraph() {
             // Filter data based on checkboxes
             const selectedGroups = new Set();
@@ -937,9 +1038,9 @@ function normalizePredicate(pred) {
             const nodeLabelEnter = nodeLabelGroup.enter().append('g')
                 .attr('class', 'node-label-group')
                 .attr('display', d => d.isIri ? null : null)
-                .on('click', (event, d) => { if (d.isIri) { event.stopPropagation(); const iri = addDefaultScheme(expandIri(d.id)); window.open(iri, '_blank'); } })
+                .on('click', (event, d) => { if (d.isIri) { event.stopPropagation(); const iri = makeEntityUrl(d.id); window.open(iri, '_blank'); } })
                 .on('mouseover', (event, d) => {
-                    const iri = d.isIri ? addDefaultScheme(expandIri(d.id)) : '';
+                    const iri = d.isIri ? makeEntityUrl(d.id) : '';
                     tooltip.style('visibility', 'visible').html(d.isIri ? `Open: <strong>${iri}</strong>` : `Literal value`);
                 })
                 .on('mousemove', event => tooltip.style('top', (event.pageY - 10) + 'px').style('left', (event.pageX + 10) + 'px'))
@@ -959,10 +1060,9 @@ function normalizePredicate(pred) {
             predicateIconGroup.exit().remove();
             const predicateIconEnter = predicateIconGroup.enter().append('g')
                 .attr('class', 'predicate-icon-group')
-                .on('click', (event, d) => { event.stopPropagation(); const iriRaw = d.predicate.includes(':') ? expandIri(d.predicate) : d.predicate; const iri = addDefaultScheme(iriRaw); window.open(iri, '_blank'); })
+                .on('click', (event, d) => { event.stopPropagation(); const iri = makeEntityUrl(d.predicate); window.open(iri, '_blank'); })
                 .on('mouseover', (event, d) => {
-                    const iriRaw = d.predicate.includes(':') ? expandIri(d.predicate) : d.predicate;
-                    const iri = addDefaultScheme(iriRaw);
+                    const iri = makeEntityUrl(d.predicate);
                     tooltip.style('visibility', 'visible').html(`Relationship: <strong>${d.predicate}</strong><br/>IRI: ${iri}`);
                 })
                 .on('mousemove', event => tooltip.style('top', (event.pageY - 10) + 'px').style('left', (event.pageX + 10) + 'px'))
@@ -981,10 +1081,9 @@ function normalizePredicate(pred) {
             predicateLabelGroup.exit().remove();
             const predicateLabelEnter = predicateLabelGroup.enter().append('g')
                 .attr('class', 'predicate-label-group')
-                .on('click', (event, d) => { event.stopPropagation(); const iriRaw = d.predicate.includes(':') ? expandIri(d.predicate) : d.predicate; const iri = addDefaultScheme(iriRaw); window.open(iri, '_blank'); })
+                .on('click', (event, d) => { event.stopPropagation(); const iri = makeEntityUrl(d.predicate); window.open(iri, '_blank'); })
                 .on('mouseover', (event, d) => {
-                    const iriRaw = d.predicate.includes(':') ? expandIri(d.predicate) : d.predicate;
-                    const iri = addDefaultScheme(iriRaw);
+                    const iri = makeEntityUrl(d.predicate);
                     tooltip.style('visibility', 'visible').html(`Relationship: <strong>${predicateTerm(d.predicate)}</strong><br/>IRI: ${iri}`);
                 })
                 .on('mousemove', event => tooltip.style('top', (event.pageY - 10) + 'px').style('left', (event.pageX + 10) + 'px'))
@@ -1296,6 +1395,70 @@ function normalizePredicate(pred) {
             document.getElementById('controls-toggle').addEventListener('click', () => {
                 document.getElementById('controls').classList.toggle('hidden');
             });
+
+            // URL format controls wiring
+            try {
+                const rDef = document.getElementById('url-format-default');
+                const rVir = document.getElementById('url-format-virtuoso');
+                const describeInput = document.getElementById('describe-base-input');
+                if (rDef && rVir && describeInput) {
+                    // Initialize
+                    rDef.checked = (urlFormat !== 'virtuoso');
+                    rVir.checked = (urlFormat === 'virtuoso');
+                    // Prepopulate describe base
+                    if (!describeBase) {
+                        try {
+                            const ep = document.getElementById('sparql-endpoint')?.value || '';
+                            describeBase = deriveDescribeBaseFromEndpoint(ep);
+                        } catch(_) {}
+                    }
+                    describeInput.value = describeBase || '';
+
+                    const onUrlFormatChange = () => {
+                        urlFormat = rVir.checked ? 'virtuoso' : 'default';
+                        try { window.urlFormat = urlFormat; } catch(_) {}
+                        try { localStorage.setItem('urlFormat', urlFormat); } catch(_) {}
+                        // Update URL immediately even if sync is currently suppressed
+                        try { updateUrlFormatParamsOnly(); } catch(_) {}
+                        // No need to re-render; affects click/tooltip formatting dynamically
+                        try { syncUrlToUi(); } catch(_) {}
+                    };
+                    rDef.addEventListener('change', onUrlFormatChange);
+                    rVir.addEventListener('change', onUrlFormatChange);
+
+                    const onDescribeChange = () => {
+                        describeBase = normalizeDescribeBase(describeInput.value);
+                        try { window.describeBase = describeBase; } catch(_) {}
+                        describeInput.value = describeBase;
+                        try { localStorage.setItem('describeBase', describeBase); } catch(_) {}
+                        try { updateUrlFormatParamsOnly(); } catch(_) {}
+                        try { syncUrlToUi(); } catch(_) {}
+                    };
+                    describeInput.addEventListener('change', onDescribeChange);
+                    describeInput.addEventListener('blur', onDescribeChange);
+
+                    // Keep describe base synced when SPARQL endpoint field changes and user hasn't customized
+                    const epInput = document.getElementById('sparql-endpoint');
+                    if (epInput) {
+                        epInput.addEventListener('change', () => {
+                            try {
+                                // Only auto-update if current describeBase matches old derived base or is empty
+                                const current = describeBase;
+                                const derived = deriveDescribeBaseFromEndpoint(epInput.value);
+                                if (!current || current === deriveDescribeBaseFromEndpoint(epInput.defaultValue || '')) {
+                                    describeBase = derived;
+                                    describeInput.value = describeBase;
+                                    try { localStorage.setItem('describeBase', describeBase); } catch(_) {}
+                                    try { window.describeBase = describeBase; } catch(_) {}
+                                    try { updateUrlFormatParamsOnly(); } catch(_) {}
+                                }
+                            } catch(_) {}
+                        });
+                    }
+                    // Ensure the URL reflects initial state on load
+                    try { updateUrlFormatParamsOnly(); } catch(_) {}
+                }
+            } catch(_) {}
 
             const controlsPanel = document.getElementById('controls');
             const controlsHeader = controlsPanel.querySelector('.controls-header');
@@ -1746,15 +1909,11 @@ function normalizePredicate(pred) {
                 if (!t) return t;
                 const parts = t.split(/("(?:[^"\\]|\\.)*")/g);
                 const reParens = /(?<!<)([A-Za-z_][A-Za-z0-9_-]*:(?!\/{2})[^\s;,{}]*\([^\s]*\)[^\s;,{}]*)/g;
-                const reDotEnd = /(?<!<)([A-Za-z_][A-Za-z0-9_-]*:(?!\/{2})[^\s;,{}]*\.)\s/g;
                 for (let i = 0; i < parts.length; i++) {
                     if (i % 2 === 0) { // only outside quotes
                         parts[i] = parts[i]
                           .replace(reParens, (m) => {
                             try { return `<${expandIri(m)}>`; } catch(_) { return m; }
-                          })
-                          .replace(reDotEnd, (m, token) => {
-                            try { return `<${expandIri(token)}>` + ' '; } catch(_) { return m; }
                           });
                     }
                 }
@@ -1932,6 +2091,7 @@ function normalizePredicate(pred) {
                 const json = await res.json();
                 // Cache raw JSON-LD for re-processing when toggles change
                 try { window.lastFetchedJsonData = json; } catch(_) {}
+                try { lastFetchedJsonData = json; } catch(_) {}
                 const graph = jsonldToGraph(json);
                 applyGraphData(graph, merge);
                 refreshFiltersAndLegend();
@@ -2178,32 +2338,34 @@ function normalizePredicate(pred) {
                     if (isLabelPred(predKey) || isLabelPred(predIri)) {
                         // Always collect labels so IRIs get friendly names
                         collectLabelsFor(subjectId, value, predIri);
-                        // Additionally: when friendly labels are ON, we still want numeric/date values to be visible in the graph.
-                        // Create edges for numeric/date literal values only.
+                        // Edges for label values:
+                        // - When friendly labels are ON: include only numeric/date literals to avoid clutter
+                        // - When OFF: include ALL literal values (string/boolean/number/date)
                         const vals = Array.isArray(value) ? value : [value];
                         for (const v of vals) {
                             if (v && typeof v === 'object' && '@value' in v) {
-                                const litType = inferLiteralType(v['@value'], v['@type']);
-                                if (litType === 'number' || litType === 'date') {
+                                if (!useFriendlyLabels) {
+                                    const litType = inferLiteralType(v['@value'], v['@type']);
                                     const litId = `_:lit_${Math.random().toString(36).slice(2)}`;
                                     nodes.set(litId, { id: litId, name: String(v['@value']), group: 'literal', isIri: false, literalType: litType });
                                     links.push({ source: subjectId, target: litId, predicate: predIri });
                                 }
                             } else if (typeof v === 'number') {
-                                const litId = `_:lit_${Math.random().toString(36).slice(2)}`;
-                                nodes.set(litId, { id: litId, name: String(v), group: 'literal', isIri: false, literalType: 'number' });
-                                links.push({ source: subjectId, target: litId, predicate: predIri });
-                            } else if (typeof v === 'string') {
-                                const litType = inferLiteralType(v, undefined);
-                                if (litType === 'date') {
+                                if (!useFriendlyLabels) {
+                                    const litId = `_:lit_${Math.random().toString(36).slice(2)}`;
+                                    nodes.set(litId, { id: litId, name: String(v), group: 'literal', isIri: false, literalType: 'number' });
+                                    links.push({ source: subjectId, target: litId, predicate: predIri });
+                                }
+                            } else if (typeof v === 'boolean' || typeof v === 'string') {
+                                if (!useFriendlyLabels) {
+                                    const litType = inferLiteralType(v, undefined);
                                     const litId = `_:lit_${Math.random().toString(36).slice(2)}`;
                                     nodes.set(litId, { id: litId, name: String(v), group: 'literal', isIri: false, literalType: litType });
                                     links.push({ source: subjectId, target: litId, predicate: predIri });
                                 }
                             }
                         }
-                        // When friendly labels are OFF, we already created edges for all label values above via the same logic
-                        // so simply return here to avoid double-processing.
+                        // Done processing label values
                         return;
                     }
                     if (Array.isArray(value)) { value.forEach(v => processValue(subjectId, predKey, v)); return; }
@@ -2228,30 +2390,34 @@ function normalizePredicate(pred) {
                                 if (isLabelPred(k) || isLabelPred(kIri)) {
                                     // Always collect labels
                                     collectLabelsFor(objId, v, kIri);
-                                    // But keep numeric/date literal values visible even with friendly labels
+                                    // Edges for label values on nested objects:
+                                    // - When friendly labels are ON: include only numeric/date literals
+                                    // - When OFF: include ALL literal values
                                     const vals = Array.isArray(v) ? v : [v];
                                     for (const vv of vals) {
                                         if (vv && typeof vv === 'object' && '@value' in vv) {
-                                            const litType = inferLiteralType(vv['@value'], vv['@type']);
-                                            if (litType === 'number' || litType === 'date') {
+                                            if (!useFriendlyLabels) {
+                                                const litType = inferLiteralType(vv['@value'], vv['@type']);
                                                 const litId = `_:lit_${Math.random().toString(36).slice(2)}`;
                                                 nodes.set(litId, { id: litId, name: String(vv['@value']), group: 'literal', isIri: false, literalType: litType });
                                                 links.push({ source: objId, target: litId, predicate: kIri });
                                             }
                                         } else if (typeof vv === 'number') {
-                                            const litId = `_:lit_${Math.random().toString(36).slice(2)}`;
-                                            nodes.set(litId, { id: litId, name: String(vv), group: 'literal', isIri: false, literalType: 'number' });
-                                            links.push({ source: objId, target: litId, predicate: kIri });
-                                        } else if (typeof vv === 'string') {
-                                            const litType = inferLiteralType(vv, undefined);
-                                            if (litType === 'date') {
+                                            if (!useFriendlyLabels) {
+                                                const litId = `_:lit_${Math.random().toString(36).slice(2)}`;
+                                                nodes.set(litId, { id: litId, name: String(vv), group: 'literal', isIri: false, literalType: 'number' });
+                                                links.push({ source: objId, target: litId, predicate: kIri });
+                                            }
+                                        } else if (typeof vv === 'boolean' || typeof vv === 'string') {
+                                            if (!useFriendlyLabels) {
+                                                const litType = inferLiteralType(vv, undefined);
                                                 const litId = `_:lit_${Math.random().toString(36).slice(2)}`;
                                                 nodes.set(litId, { id: litId, name: String(vv), group: 'literal', isIri: false, literalType: litType });
                                                 links.push({ source: objId, target: litId, predicate: kIri });
                                             }
                                         }
                                     }
-                                    continue; // prevent non-numeric label edges when friendly labels are on
+                                    continue; // skip normal edge handling for label predicates
                                 }
                                 processValue(objId, k, v);
                             }
@@ -2283,57 +2449,50 @@ function normalizePredicate(pred) {
             }
 
             // Apply best label per IRI using predicate priority and language (now that nested labels have been collected)
-            if (useFriendlyLabels) {
-                const DEFAULT_LABEL_PRIORITY = ['skos:prefLabel','rdfs:label','schema:name','schema:title','foaf:name'];
-                let LABEL_PRIORITY = DEFAULT_LABEL_PRIORITY.slice();
-                try {
-                    const saved = JSON.parse(localStorage.getItem('labelPriority') || '[]');
-                    const allowed = new Set(DEFAULT_LABEL_PRIORITY);
-                    if (Array.isArray(saved) && saved.length && saved.every(k => allowed.has(k))) LABEL_PRIORITY = saved;
-                } catch(_) {}
-                const usedByIri = new Map(); // iri -> { predKey, val }
-                const counts = { 'skos:prefLabel':0,'rdfs:label':0,'schema:name':0,'schema:title':0,'foaf:name':0, 'fallback':0 };
-                for (const [iri, labels] of iriToLabels.entries()) {
-                    const node = nodes.get(iri);
-                    if (!node || !labels.length) continue;
-                    let chosen = null; let chosenPredKey = 'fallback';
-                    for (const key of LABEL_PRIORITY) {
-                        // find labels matching this prioritized predicate (by compact form)
-                        const pool = labels.filter(l => compactIri(l.pred) === key);
-                        if (!pool.length) continue;
-                        const byLang = pool.find(l => (l.lang || '') === prefLang) || pool.find(l => !l.lang) || pool[0];
-                        if (byLang) { chosen = byLang; chosenPredKey = key; break; }
-                    }
-                    if (!chosen) {
-                        // no prioritized predicate matched; fallback to language pref across all labels
-                        chosen = labels.find(l => (l.lang || '') === prefLang) || labels.find(l => !l.lang) || labels[0];
-                        // if we have a predicate, account under its compact name rather than generic fallback
-                        if (chosen && chosen.pred) {
-                            const ck = compactIri(chosen.pred);
-                            if (ck) chosenPredKey = ck;
-                        }
-                    }
-                    if (chosen && chosen.val) {
-                        node.name = chosen.val;
-                        usedByIri.set(iri, { predKey: chosenPredKey, val: chosen.val });
-                        if (counts[chosenPredKey] !== undefined) counts[chosenPredKey]++; else counts.fallback++;
+            const DEFAULT_LABEL_PRIORITY = ['skos:prefLabel','rdfs:label','schema:name','schema:title','foaf:name'];
+            let LABEL_PRIORITY = DEFAULT_LABEL_PRIORITY.slice();
+            try {
+                const saved = JSON.parse(localStorage.getItem('labelPriority') || '[]');
+                const allowed = new Set(DEFAULT_LABEL_PRIORITY);
+                if (Array.isArray(saved) && saved.length && saved.every(k => allowed.has(k))) LABEL_PRIORITY = saved;
+            } catch(_) {}
+            const usedByIri = new Map(); // iri -> { predKey, val }
+            const counts = { 'skos:prefLabel':0,'rdfs:label':0,'schema:name':0,'schema:title':0,'foaf:name':0, 'fallback':0 };
+            for (const [iri, labels] of iriToLabels.entries()) {
+                const node = nodes.get(iri);
+                if (!node || !labels.length) continue;
+                let chosen = null; let chosenPredKey = 'fallback';
+                for (const key of LABEL_PRIORITY) {
+                    // find labels matching this prioritized predicate (by compact form)
+                    const pool = labels.filter(l => compactIri(l.pred) === key);
+                    if (!pool.length) continue;
+                    const byLang = pool.find(l => (l.lang || '') === prefLang) || pool.find(l => !l.lang) || pool[0];
+                    if (byLang) { chosen = byLang; chosenPredKey = key; break; }
+                }
+                if (!chosen) {
+                    // no prioritized predicate matched; fallback to language pref across all labels
+                    chosen = labels.find(l => (l.lang || '') === prefLang) || labels.find(l => !l.lang) || labels[0];
+                    // if we have a predicate, account under its compact name rather than generic fallback
+                    if (chosen && chosen.pred) {
+                        const ck = compactIri(chosen.pred);
+                        if (ck) chosenPredKey = ck;
                     }
                 }
-                // Expose last resolution for modal
-                try { window.__lastLabelResolution = { priority: LABEL_PRIORITY.slice(), usedByIri, counts }; } catch(_) {}
+                if (chosen && chosen.val) {
+                    if (useFriendlyLabels) node.name = chosen.val;
+                    usedByIri.set(iri, { predKey: chosenPredKey, val: chosen.val });
+                    if (counts[chosenPredKey] !== undefined) counts[chosenPredKey]++; else counts.fallback++;
+                }
             }
+            // Expose last resolution for modal (available regardless of friendly labels toggle)
+            try { window.__lastLabelResolution = { priority: LABEL_PRIORITY.slice(), usedByIri, counts }; } catch(_) {}
 
             // Compact & cleanup
             const finalNodes = Array.from(nodes.values()).map(n => ({ ...n, id: compactIri(n.id), types: n.types ? new Set(Array.from(n.types)) : new Set() }));
             let finalLinks = links.map(l => ({ source: compactIri(l.source), target: compactIri(l.target), predicate: compactIri(l.predicate) }));
             if (useFriendlyLabels) {
-                // Keep label edges to numeric/date literals; drop other label edges
-                const nodeById = new Map(finalNodes.map(n => [n.id, n]));
-                finalLinks = finalLinks.filter(l => {
-                    if (!isLabelPred(l.predicate)) return true;
-                    const t = nodeById.get(l.target);
-                    return !!(t && t.group === 'literal' && (t.literalType === 'number' || t.literalType === 'date'));
-                });
+                // Remove all label predicate edges when friendly labels are ON
+                finalLinks = finalLinks.filter(l => !isLabelPred(l.predicate));
                 const ref = new Set();
                 for (const l of finalLinks) { ref.add(l.source); ref.add(l.target); }
                 for (let i = finalNodes.length - 1; i >= 0; i--) {
@@ -2372,6 +2531,13 @@ function normalizePredicate(pred) {
             if (!Number.isNaN(limitVal)) params.set('limit', String(limitVal));
             const service = document.getElementById('sparql-endpoint')?.value?.trim();
             if (service) params.set('service', service); else params.delete('service');
+            // url format and describe base
+            try {
+                const fmt = (window.urlFormat === 'virtuoso') ? 'virtuoso' : 'default';
+                params.set('urlfmt', fmt);
+                const db = window.describeBase || '';
+                if (fmt === 'virtuoso' && db) params.set('describe', db); else params.delete('describe');
+            } catch(_) {}
             // enabled rdf:types (comma-separated)
             try {
                 const typesArr = selectedTypes ? Array.from(selectedTypes) : [];
@@ -2594,6 +2760,24 @@ function normalizePredicate(pred) {
                 const ep = document.getElementById('sparql-endpoint');
                 if (ep) ep.value = service;
             }
+            // url format & describe base
+            try {
+                const fmt = params.get('urlfmt');
+                if (fmt === 'virtuoso' || fmt === 'default') {
+                    window.urlFormat = fmt;
+                    const rDef = document.getElementById('url-format-default');
+                    const rVir = document.getElementById('url-format-virtuoso');
+                    if (rDef && rVir) { rDef.checked = (fmt !== 'virtuoso'); rVir.checked = (fmt === 'virtuoso'); }
+                    try { localStorage.setItem('urlFormat', fmt); } catch(_) {}
+                }
+                const desc = params.get('describe');
+                if (desc) {
+                    window.describeBase = normalizeDescribeBase(desc);
+                    const di = document.getElementById('describe-base-input');
+                    if (di) di.value = window.describeBase;
+                    try { localStorage.setItem('describeBase', window.describeBase); } catch(_) {}
+                }
+            } catch(_) {}
             const lang = params.get('lang');
             if (lang) { const l = document.getElementById('pref-lang'); if (l) l.value = lang; }
             const hideTypes = params.get('hideTypes');
@@ -3164,7 +3348,7 @@ function normalizePredicate(pred) {
                 // If a URL-provided query exists, avoid setting defaults; will be applied below
                 const pendingUrlQ = (function(){ try { return window.__initialUrlQuery || localStorage.getItem('lastUrlQuery') || ''; } catch(_){ return ''; } })();
                 if (!basicAce.getValue() && !pendingUrlQ) {
-                    basicAce.setValue(`?movie <http://dbpedia.org/ontology/creator> ?creator.\nFILTER(?creator = <http://dbpedia.org/resource/Spike_Lee>).`, -1);
+                    basicAce.setValue(`?movie dbo:creator ?creator;\n\trdfs:label ?movieName.\nFILTER(?creator = dbr:Spike_Lee).`, -1);
                 }
 
                 advAce = ace.edit('adv-editor');
@@ -3178,7 +3362,7 @@ function normalizePredicate(pred) {
                     useSoftTabs: true,
                 });
                 if (!advAce.getValue() && !pendingUrlQ) {
-                    advAce.setValue(`CONSTRUCT\n{\n  ?movie <http://dbpedia.org/ontology/creator> ?creator.\n}\nWHERE\n{\n  ?movie <http://dbpedia.org/ontology/creator> ?creator.\n  FILTER(?creator = <http://dbpedia.org/resource/Spike_Lee>).\n}\nLIMIT 200`, -1);
+                    advAce.setValue(`CONSTRUCT\n{\n  ?movie dbo:creator ?creator;\n\trdfs:label ?movieName.\n}\nWHERE\n{\n  ?movie <http://dbpedia.org/ontology/creator> ?creator.\n\t  FILTER(?creator = dbr:Spike_Lee).\n}\nLIMIT 200`, -1);
                 }
 
                 // If there is a pending URL query, apply it now to both editors (including DEFINE/PREFIX)
