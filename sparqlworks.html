@@ -845,10 +845,23 @@ function normalizePredicate(pred) {
         // Options:
         // - default: open the expanded IRI directly
         // - virtuoso: open the Virtuoso Entity Description URL derived from the SPARQL endpoint
-        let urlFormat = (function(){ try { return localStorage.getItem('urlFormat') || 'default'; } catch(_) { return 'default'; } })();
+        // Initialize URL format & describe base with URL param precedence over localStorage
+        let urlFormat = (function(){
+            try {
+                const p = new URLSearchParams(window.location.search);
+                const fromUrl = p.get('urlfmt');
+                if (fromUrl === 'virtuoso' || fromUrl === 'default') return fromUrl;
+            } catch(_) {}
+            try { return localStorage.getItem('urlFormat') || 'default'; } catch(_) { return 'default'; }
+        })();
         // Mirror onto window for code paths that read from window.urlFormat
         try { window.urlFormat = urlFormat; } catch(_) {}
         let describeBase = (function(){
+            try {
+                const p = new URLSearchParams(window.location.search);
+                const fromUrl = p.get('describe');
+                if (fromUrl) return normalizeDescribeBase(fromUrl);
+            } catch(_) {}
             try {
                 const stored = localStorage.getItem('describeBase');
                 if (stored) return stored;
@@ -1455,8 +1468,11 @@ function normalizePredicate(pred) {
                             } catch(_) {}
                         });
                     }
-                    // Ensure the URL reflects initial state on load
-                    try { updateUrlFormatParamsOnly(); } catch(_) {}
+                    // Ensure the URL reflects initial state on load only if urlfmt is absent
+                    try {
+                        const p = new URLSearchParams(window.location.search);
+                        if (!p.has('urlfmt')) updateUrlFormatParamsOnly();
+                    } catch(_) {}
                 }
             } catch(_) {}
 
@@ -2764,7 +2780,9 @@ function normalizePredicate(pred) {
             try {
                 const fmt = params.get('urlfmt');
                 if (fmt === 'virtuoso' || fmt === 'default') {
+                    // Keep both the window-scoped and local-scoped variables in sync
                     window.urlFormat = fmt;
+                    try { urlFormat = fmt; } catch(_) {}
                     const rDef = document.getElementById('url-format-default');
                     const rVir = document.getElementById('url-format-virtuoso');
                     if (rDef && rVir) { rDef.checked = (fmt !== 'virtuoso'); rVir.checked = (fmt === 'virtuoso'); }
@@ -2772,10 +2790,12 @@ function normalizePredicate(pred) {
                 }
                 const desc = params.get('describe');
                 if (desc) {
-                    window.describeBase = normalizeDescribeBase(desc);
+                    const norm = normalizeDescribeBase(desc);
+                    window.describeBase = norm;
+                    try { describeBase = norm; } catch(_) {}
                     const di = document.getElementById('describe-base-input');
-                    if (di) di.value = window.describeBase;
-                    try { localStorage.setItem('describeBase', window.describeBase); } catch(_) {}
+                    if (di) di.value = norm;
+                    try { localStorage.setItem('describeBase', norm); } catch(_) {}
                 }
             } catch(_) {}
             const lang = params.get('lang');
