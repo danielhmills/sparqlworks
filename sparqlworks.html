@@ -347,7 +347,7 @@
             <div class="control-group mb-2">
                 <label class="inline-flex items-center gap-2">
                     <input id="friendly-labels-toggle" type="checkbox" class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4" checked>
-                    <span>Use friendly labels (if available)</span>
+                    <span>Use IRI Labels (if available)</span>
                     <button id="friendly-labels-gear" type="button" title="Label priority settings"
                         class="p-1 rounded hover:bg-gray-200">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -420,7 +420,7 @@
             <div class="mb-3">
                 <label class="inline-flex items-center gap-2">
                     <input id="show-types-toggle" type="checkbox" class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4">
-                    <span>Hide types</span>
+                    <span>Hide rdf:type relationships</span>
                 </label>
                 <p class="text-xs text-gray-500 mt-1">When checked, rdf:type nodes and edges are hidden.</p>
             </div>
@@ -545,7 +545,7 @@
                 <div class="mt-2 flex items-center justify-between">
                     <label class="inline-flex items-center gap-2 text-sm text-gray-700">
                         <input id="panel-friendly-labels" type="checkbox" class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4" checked>
-                        <span>Use friendly labels</span>
+                        <span>Use IRI Labels</span>
                         <button id="panel-friendly-labels-gear" type="button" title="Label priority settings"
                             class="p-1 rounded hover:bg-gray-200">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -587,7 +587,7 @@
 
     <!-- Watermark -->
     <div id="watermark" class="fixed bottom-2 right-2 select-none pointer-events-none z-10 text-gray-500/80 text-[11px] leading-tight text-right">
-        <div>SPARQLWorks</div>
+        <div>SPARQLWorks 0.6.005</div>
         <div>OpenLink Software © 2025</div>
     </div>
 
@@ -610,9 +610,24 @@
         };
 
         function expandIri(iri) {
-            if (!iri.includes(':')) return iri;
-            const [prefix, name] = iri.split(':');
-            return (prefixes[prefix] || '') + name;
+            try {
+                if (iri == null) return iri;
+                if (typeof iri !== 'string') iri = String(iri);
+                // If already an absolute IRI, return as-is
+                if (/^https?:\/\//i.test(iri)) return iri;
+                // Default prefix CURIE like ':LocalName' -> '#LocalName'
+                if (iri.startsWith(':')) return '#' + iri.slice(1);
+                // If it's a CURIE-like value (prefix:name), expand using known prefixes
+                if (iri.includes(':')) {
+                    const idx = iri.indexOf(':');
+                    const prefix = iri.slice(0, idx);
+                    const name = iri.slice(idx + 1);
+                    if (prefixes[prefix]) return prefixes[prefix] + name;
+                    // Unknown prefix: return original untouched (avoid producing protocol-relative //)
+                    return iri;
+                }
+                return iri;
+            } catch(_) { return iri; }
         }
 
         function compactIri(iri) {
@@ -953,7 +968,7 @@ function normalizePredicate(pred) {
                     const nodeTypes = (n.types && (n.types instanceof Set ? Array.from(n.types) : n.types)) || [];
                     const hasTypes = nodeTypes.length > 0;
                     const isTypeNode = !!selectedTypes && selectedTypes.has(n.id);
-                    if (isTypeNode) return true; // always keep selected class node (subject to "Hide types" later)
+                    if (isTypeNode) return true; // always keep selected class node (subject to "Hide rdf:type relationships" later)
                     if (!hasTypes) return true;  // nodes without rdf:type are unaffected
                     return nodeTypes.some(t => selectedTypes.has(t));
                 });
@@ -1239,7 +1254,7 @@ function normalizePredicate(pred) {
 
             // Display label mapping for group names
             function labelGroup(name){
-                return name === 'external' ? 'Entity (Subject)' : name;
+                return name === 'external' ? 'IRI' : name;
             }
 
             // Filters
