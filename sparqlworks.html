@@ -30,7 +30,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SPARQL Query Visualizer</title>
+    <title>SPARQLWorks™</title>
 
     <!-- Structured Data for Search Engines (JSON-LD) -->
     <script type="application/ld+json">
@@ -39,12 +39,12 @@
         "@vocab": "https://schema.org/"
       },
       "@type": "WebPage",
-      "name": "SPARQL Query Visualizer",
+      "name": "SPARQLWorks™",
       "description": "An interactive SPARQL Query Visualizer and graph visualizer for RDF/Linked Data. Build queries in Basic or Advanced modes and visualize results.",
       "keywords": "SPARQL, RDF, Linked Data, Knowledge Graph, Graph Visualization, D3.js, JSON-LD",
       "mainEntity": {
         "@type": "WebApplication",
-        "name": "SPARQL Query Visualizer",
+        "name": "SPARQLWorks™ Visualizer",
         "applicationCategory": "DeveloperApplication",
         "operatingSystem": "Any",
         "browserRequirements": "Requires a modern web browser",
@@ -301,6 +301,31 @@
         <div id="toast-inner" class="px-3 py-2 rounded-lg shadow bg-gray-800 text-white text-sm"></div>
     </div>
 
+    <!-- Error modal for full error details -->
+    <div id="error-modal" class="fixed inset-0 z-50 hidden">
+      <div class="absolute inset-0 bg-black/40" data-err-close="1"></div>
+      <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="w-[46rem] max-w-full max-h-[85vh] rounded-2xl bg-white shadow-2xl border border-white/40 overflow-hidden flex flex-col">
+          <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <h3 class="text-base font-semibold text-gray-800">Query Error</h3>
+            <div class="flex items-center gap-2">
+              <button id="error-copy" class="px-2 py-1 text-xs rounded border hover:bg-gray-100" title="Copy details">Copy</button>
+              <button class="p-2 rounded hover:bg-gray-100" title="Close" data-err-close="1">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            </div>
+          </div>
+          <div class="px-4 py-3 text-sm text-gray-700 overflow-auto">
+            <div id="error-summary" class="mb-2 text-red-700 font-medium"></div>
+            <pre id="error-details" class="text-xs bg-gray-50 border border-gray-200 rounded-lg p-3 whitespace-pre-wrap max-h-[65vh] overflow-auto"></pre>
+          </div>
+          <div class="px-4 py-3 bg-gray-50 flex items-center justify-end gap-2 border-t border-gray-100">
+            <button class="px-3 py-2 rounded bg-white text-gray-800 border hover:bg-gray-100" data-err-close="1">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Mode switch warning modal (top-level, not inside hidden containers) -->
     <div id="mode-switch-modal" class="fixed inset-0 z-50 hidden">
       <div class="absolute inset-0 bg-black/30" data-ms-close="1"></div>
@@ -451,15 +476,45 @@
     <button id="account-button" title="Account" class="fixed top-2 right-4 p-2 rounded-full bg-white/70 backdrop-blur-sm shadow-md hover:bg-gray-200 transition-colors z-40 border" style="border-color: rgba(0,0,0,0.1);">
         <svg id="account-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-3-3.87"/><path d="M4 21v-2a4 4 0 0 1 3-3.87"/><circle cx="12" cy="7" r="4"/></svg>
     </button>
-    <div id="account-menu" class="hidden fixed top-20 right-4 z-50 bg-white/95 backdrop-blur-xl rounded-xl border border-white/50 shadow-lg w-60 p-3">
-        <!--
-        <div id="acct-status" class="px-2 py-2 text-sm text-gray-700">Not signed in</div>
+    <div id="account-menu" class="hidden fixed top-20 right-4 z-50 bg-white/95 backdrop-blur-xl rounded-xl border border-white/50 shadow-lg w-64 p-3 space-y-2">
+        <div id="acct-status" class="px-2 py-2 text-sm font-medium text-gray-700">Not signed in</div>
+        <p id="auth-status-msg" class="px-2 text-xs text-gray-600 leading-snug"></p>
         <div class="border-t my-1"></div>
-        <button id="acct-login" class="w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm">Log in / Sign up</button>
-        <button id="acct-settings" class="w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm">Settings</button>
+        <button id="oauth-login-btn" class="w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm">Log In</button>
+        <button id="acct-token-btn" class="w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm">Provide Bearer token</button>
+        <button id="acct-settings" class="w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm">OAuth Settings</button>
         <button id="acct-logout" class="w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm hidden">Log out</button>
-        -->
-        <div class="text-sm text-gray-700">Sign-in options <span class="italic">coming soon</span>.</div>
+        <button id="qs-auth-and-create" type="button" class="hidden"></button>
+    </div>
+
+    <div id="token-modal" class="fixed inset-0 z-50 hidden">
+      <div class="absolute inset-0 bg-black/40" data-token-close="1"></div>
+      <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="w-[28rem] max-w-full rounded-2xl bg-white shadow-2xl border border-white/40 overflow-hidden">
+          <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <h3 class="text-base font-semibold text-gray-800">Provide Bearer Token</h3>
+            <button class="p-2 rounded hover:bg-gray-100" title="Close" data-token-close="1">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+          <div class="px-4 py-4 space-y-3 text-sm text-gray-700">
+            <p>Paste a bearer token for the current SPARQL endpoint. This will be stored locally and used for authenticated queries.</p>
+            <div>
+              <label for="token-input" class="block text-sm font-medium text-gray-600 mb-1">Bearer token</label>
+              <div class="relative">
+                <input id="token-input" type="password" class="w-full rounded-lg border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 p-2 pr-10" placeholder="•••••••••••••••••••••••••••••••" autocomplete="off" />
+                <button id="token-visibility-toggle" type="button" class="absolute inset-y-0 right-2 my-auto p-1 rounded hover:bg-gray-200" aria-label="Show token" title="Show token" data-visible="0">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="px-4 py-3 bg-gray-50 flex items-center justify-end gap-2 border-t border-gray-100">
+            <button id="token-cancel" class="px-3 py-2 rounded bg-white text-gray-800 border hover:bg-gray-100" data-token-close="1">Cancel</button>
+            <button id="token-save" class="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Save & Authenticate</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- OAuth Settings modal -->
@@ -516,10 +571,10 @@
                 <!-- SPARQL Endpoint selector -->
                 <div class="mb-3">
                     <label for="sparql-endpoint" class="block text-sm font-medium text-gray-700 mb-1">SPARQL Endpoint</label>
-                    <input id="sparql-endpoint" list="endpoint-list" type="text" placeholder="https://example.org/sparql" value="https://dbpedia.org/sparql"
+                    <input id="sparql-endpoint" list="endpoint-list" type="text" placeholder="https://example.org/sparql" value="https://demo.openlinksw.com/sparql"
                     class="w-full p-2 rounded-md bg-white/80 border border-white/40 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     <datalist id="endpoint-list">
-                        <option value="https://dbpedia.org/sparql"></option>
+                        <option value="https://demo.openlinksw.com/sparql"></option>
                         <option value="https://query.wikidata.org/sparql"></option>
                         <option value="https://linkedbrainz.c4dmpresents.org/sparql"></option>
                         <option value="https://opendata.org/api/sparql"></option>
@@ -560,7 +615,7 @@
                         <button id="clear-graph" class="px-4 py-2 text-sm rounded-full bg-white/80 text-gray-900 shadow-sm hover:bg-white active:bg-gray-100 border border-white/40">Clear</button>
                     </div>
                 </div>
-                <p class="mt-2 text-xs text-gray-600">Runs against https://dbpedia.org/sparql. Use CONSTRUCT for graph results. Literals appear as small nodes.</p>
+                <p class="mt-2 text-xs text-gray-600">Runs against https://demo.openlinksw.com/sparql. Use CONSTRUCT for graph results. Literals appear as small nodes.</p>
             </div>
         </div>
         <!-- Resize handle -->
@@ -587,7 +642,7 @@
 
     <!-- Watermark -->
     <div id="watermark" class="fixed bottom-2 right-2 select-none pointer-events-none z-10 text-gray-500/80 text-[11px] leading-tight text-right">
-        <div>SPARQLWorks 0.6.005</div>
+        <div>SPARQLWorks™ 0.6.23</div>
         <div>OpenLink Software © 2025</div>
     </div>
 
@@ -2045,6 +2100,13 @@ function normalizePredicate(pred) {
             } catch(_) {} finally { window.__settingAdvProgrammatically = false; }
             // Treat externally loaded query as custom Advanced content
             try { window.__advDirty = true; } catch(_) {}
+            // If the incoming text is a full SPARQL (Advanced) query, do NOT transform or mirror into Basic.
+            // This prevents Basic->Advanced regeneration from overwriting the exact Advanced text the URL provided.
+            try {
+                if (detectModeForQuery(fullQuery) === 'advanced') {
+                    return; // skip populating Basic and LIMIT
+                }
+            } catch(_) {}
             const { whereBody, limit } = extractWhereAndLimit(fullQuery);
             // Extract leading DEFINE/PREFIX/BASE lines (prolog)
             let prolog = '';
@@ -2065,6 +2127,8 @@ function normalizePredicate(pred) {
             } catch(_) { prolog = ''; }
             if (whereBody) {
                 const basicText = prolog ? (prolog + '\n' + whereBody) : whereBody;
+                // Avoid Basic->Advanced mirroring overwriting the Advanced editor we just set
+                try { window.__suppressNextBasicToAdvancedSync = true; } catch(_) {}
                 try { ace.edit('basic-editor').setValue(basicText, -1); } catch(_) {}
             }
             if (typeof limit === 'number' && !Number.isNaN(limit)) {
@@ -2079,7 +2143,7 @@ function normalizePredicate(pred) {
         async function runSparqlConstruct() {
             const btn = document.getElementById('run-query');
             const merge = false; // merging disabled; each run replaces the graph
-            const endpoint = (document.getElementById('sparql-endpoint')?.value?.trim()) || localStorage.getItem('sparqlEndpoint') || 'https://dbpedia.org/sparql';
+            const endpoint = (document.getElementById('sparql-endpoint')?.value?.trim()) || localStorage.getItem('sparqlEndpoint') || 'https://demo.openlinksw.com/sparql';
             const mode = getSelectedMode();
             try { if (typeof window.setQueryMode === 'function') window.setQueryMode(mode); } catch(_){ }
             let query = '';
@@ -2118,7 +2182,13 @@ function normalizePredicate(pred) {
                 const tok = getAccessToken();
                 if (tok) hdrs.headers['Authorization'] = `Bearer ${tok}`;
                 const res = await fetch(endpoint, hdrs);
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                if (!res.ok) {
+                    let bodyText = '';
+                    try { bodyText = await res.text(); } catch(_) { bodyText = ''; }
+                    // Show just the response body in the modal (as requested)
+                    showErrorModal(`Query failed (HTTP ${res.status})`, bodyText || `HTTP ${res.status}`);
+                    throw new Error(`HTTP ${res.status}`);
+                }
                 const json = await res.json();
                 // Cache raw JSON-LD for re-processing when toggles change
                 try { window.lastFetchedJsonData = json; } catch(_) {}
@@ -2133,7 +2203,12 @@ function normalizePredicate(pred) {
                     showToast('No results for this query. Try broadening the WHERE clause or increasing LIMIT.', 'info', 2600);
                 }
             } catch (e) {
-                alert('SPARQL query failed: ' + e.message);
+                if (!document.getElementById('error-modal')?.classList.contains('hidden')) {
+                    // already shown via non-OK response handling
+                } else {
+                    const details = `Error: ${e?.stack || e?.message || String(e)}`;
+                    showErrorModal('SPARQL query failed', details);
+                }
             } finally {
                 btn.disabled = false; btn.textContent = 'Run Query';
             }
@@ -2142,7 +2217,7 @@ function normalizePredicate(pred) {
         // Run an explicit SPARQL query string, bypassing editor content
         async function runSparqlWithQuery(explicitQuery, urlModeOverride) {
             const btn = document.getElementById('run-query');
-            const endpoint = (document.getElementById('sparql-endpoint')?.value?.trim()) || localStorage.getItem('sparqlEndpoint') || 'https://dbpedia.org/sparql';
+            const endpoint = (document.getElementById('sparql-endpoint')?.value?.trim()) || localStorage.getItem('sparqlEndpoint') || 'https://demo.openlinksw.com/sparql';
             const mode = urlModeOverride || getSelectedMode();
             const query = explicitQuery;
             // Treat explicit runs as custom queries
@@ -2155,15 +2230,24 @@ function normalizePredicate(pred) {
                 const params = new URLSearchParams();
                 params.set('query', query);
                 params.set('format', 'application/ld+json');
-                const res = await fetch(endpoint, {
+                const hdrs = {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
                         'Accept': 'application/ld+json, application/json;q=0.9, */*;q=0.1'
                     },
                     body: params.toString()
-                });
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                };
+                const tok = getAccessToken();
+                if (tok) hdrs.headers['Authorization'] = `Bearer ${tok}`;
+                const res = await fetch(endpoint, hdrs);
+                if (!res.ok) {
+                    let bodyText = '';
+                    try { bodyText = await res.text(); } catch(_) { bodyText = ''; }
+                    // Show only the response body in the modal (as requested)
+                    showErrorModal(`Query failed (HTTP ${res.status})`, bodyText || `HTTP ${res.status}`);
+                    throw new Error(`HTTP ${res.status}`);
+                }
                 const data = await res.json();
                 lastFetchedJsonData = data;
                 const graph = jsonldToGraph(data);
@@ -2178,8 +2262,12 @@ function normalizePredicate(pred) {
                     showToast('Query complete', 'success');
                 }
             } catch (err) {
-                console.error(err);
-                showToast('Query failed', 'error');
+                if (!document.getElementById('error-modal')?.classList.contains('hidden')) {
+                    // already shown via non-OK response handling
+                } else {
+                    const details = `Error: ${err?.stack || err?.message || String(err)}`;
+                    showErrorModal('SPARQL query failed', details);
+                }
             } finally {
                 btn.disabled = false; btn.textContent = 'Run Query';
             }
@@ -2834,13 +2922,17 @@ function normalizePredicate(pred) {
             // edge annotations
             let annot = params.get('annot') || params.get('edgeAnnot'); // legacy key support
             if (annot === 'names' || annot === 'icons') {
+                // Apply to both the window-scoped flag (used in URL building) and the live local var used by rendering
                 window.edgeAnnotationMode = annot;
+                try { edgeAnnotationMode = annot; } catch(_) {}
                 try { localStorage.setItem('edgeAnnot', annot); } catch(_) {}
                 try {
                     const ai = document.getElementById('edge-annot-icons');
                     const an = document.getElementById('edge-annot-names');
                     if (ai && an) { ai.checked = annot === 'icons'; an.checked = annot === 'names'; }
                 } catch(_) {}
+                // If a graph is already present, re-render to reflect the chosen annotation mode
+                try { updateGraph(); } catch(_) {}
             }
             // node positions
             const pos = params.get('pos');
@@ -2860,6 +2952,8 @@ function normalizePredicate(pred) {
             const q = incomingQ;
             if (q) {
                 const chosenMode = urlMode || detectModeForQuery(q);
+                // If the URL intends Advanced, lock Advanced so no Basic->Advanced mirroring can occur
+                try { if (chosenMode === 'advanced') window.__lockAdvancedFromUrl = true; } catch(_) {}
                 const modal = ensureQueryParamModal();
                 const show = () => { try { const qp = document.getElementById('query-panel'); if (qp) qp.classList.add('hidden'); const la = document.getElementById('query-panel-launcher'); if (la) la.classList.remove('hidden'); } catch(_) {} modal.classList.remove('hidden'); };
                 const hide = () => modal.classList.add('hidden');
@@ -2934,6 +3028,51 @@ function normalizePredicate(pred) {
             clearTimeout(showToast._to);
             showToast._to = setTimeout(() => t.classList.add('hidden'), timeout);
         }
+
+        // Error modal helpers
+        function showErrorModal(summary, details) {
+            try {
+                const modal = document.getElementById('error-modal');
+                const sumEl = document.getElementById('error-summary');
+                const detEl = document.getElementById('error-details');
+                if (!modal || !sumEl || !detEl) { alert(summary + (details ? ('\n\n' + details) : '')); return; }
+                sumEl.textContent = summary || 'Error';
+                // Avoid massive DOM costs by slicing extremely huge payloads, but keep most data
+                const MAX_LEN = 500000; // ~500 KB
+                const text = (details || '').slice(0, MAX_LEN);
+                detEl.textContent = text;
+                modal.classList.remove('hidden');
+            } catch(e) {
+                try { alert(summary); } catch(_) {}
+            }
+        }
+
+        (function setupErrorModal(){
+            const modal = document.getElementById('error-modal');
+            if (!modal) return;
+            const copyBtn = document.getElementById('error-copy');
+            const detEl = document.getElementById('error-details');
+            const closeAll = () => modal.classList.add('hidden');
+            modal.addEventListener('click', (evt) => {
+                try {
+                    const closeEl = evt.target?.closest?.('[data-err-close]');
+                    if (closeEl) return closeAll();
+                } catch(_) {}
+            });
+            document.addEventListener('keydown', (evt) => {
+                if (!modal.classList.contains('hidden') && evt.key === 'Escape') closeAll();
+            });
+            if (copyBtn) {
+                copyBtn.addEventListener('click', async () => {
+                    try {
+                        await copyToClipboard(detEl?.textContent || '');
+                        showToast('Error details copied', 'success');
+                    } catch(_) {
+                        showToast('Copy failed', 'error');
+                    }
+                });
+            }
+        })();
 
         // Cross-browser copy helper: modern API with secure-context check, then two execCommand fallbacks (textarea and contentEditable)
         async function copyToClipboard(text) {
@@ -3034,8 +3173,16 @@ function normalizePredicate(pred) {
                     basicBtn.classList.add('text-gray-800');
                     advPanel.classList.remove('hidden');
                     basicPanel.classList.add('hidden');
-                    // Ensure Advanced shows the latest mirroring of Basic unless suppressed
-                    if (window.__isCustomQuery === true) {
+                    // If URL locked Advanced, never mirror Basic over it until user explicitly proceeds to Basic
+                    if (window.__lockAdvancedFromUrl === true) {
+                        // Keep the advanced text exactly as provided
+                        window.__suppressNextBasicToAdvancedSync = true;
+                        try { window.__advDirty = true; } catch(_) {}
+                    }
+                    // Ensure Advanced shows the latest mirroring of Basic unless suppressed or custom
+                    if (window.__lockAdvancedFromUrl === true) {
+                        // do nothing
+                    } else if (window.__isCustomQuery === true) {
                         // Skip mirroring; user owns Advanced content
                         window.__suppressNextBasicToAdvancedSync = true;
                     } else if (!window.__suppressNextBasicToAdvancedSync) {
@@ -3069,7 +3216,13 @@ function normalizePredicate(pred) {
                     try { backdrop.removeEventListener('click', onCancel); } catch(_){ }
                 }
                 function onCancel(){ cleanup(); closeModal(); }
-                function onOk(){ cleanup(); closeModal(); onProceed(); }
+                function onOk(){
+                    cleanup();
+                    closeModal();
+                    // User explicitly chose to proceed to Basic, unlock Advanced mirroring
+                    try { window.__lockAdvancedFromUrl = false; } catch(_) {}
+                    onProceed();
+                }
                 if (cancelBtn) cancelBtn.addEventListener('click', onCancel);
                 if (backdrop) backdrop.addEventListener('click', onCancel);
                 if (proceedBtn) proceedBtn.addEventListener('click', onOk);
@@ -3114,239 +3267,505 @@ function normalizePredicate(pred) {
             return 'advanced';
         }
 
-        // ===== OAuth PKCE helpers and Account Menu =====
+        // ===== Authentication helpers (OAuth + Bearer token modal) =====
+        const AUTH_SOURCE_KEY = 'sparqlworks.auth.source';
+
         function getAccessToken(){ try { return localStorage.getItem('oauthAccessToken') || ''; } catch(_) { return ''; } }
-        function setAccessToken(tok){ try { localStorage.setItem('oauthAccessToken', tok || ''); } catch(_) {} }
-        function clearAccessToken(){ try { localStorage.removeItem('oauthAccessToken'); } catch(_) {} }
-
-        function baseOriginFromEndpoint(){
-            const endpoint = (document.getElementById('sparql-endpoint')?.value?.trim()) || localStorage.getItem('sparqlEndpoint') || '';
-            try { const u = new URL(endpoint); return `${u.protocol}//${u.host}`; } catch(_) { return ''; }
-        }
-
-        async function discoverOAuthEndpoints(originOverride){
-            const origin = originOverride || baseOriginFromEndpoint();
-            if (!origin) throw new Error('Missing SPARQL endpoint');
-            // Cache per-origin in sessionStorage
-            const cacheKey = `oidc_discovery_${origin}`;
-            try { const cached = sessionStorage.getItem(cacheKey); if (cached) return JSON.parse(cached); } catch(_) {}
-            const wellKnown = `${origin}/.well-known/openid-configuration`;
+        function setAccessToken(token, source = 'oauth'){
             try {
-                showToast(`Discovering OAuth at: ${wellKnown}`, 'info', 1800);
-                const res = await fetch(wellKnown, { headers: { 'Accept': 'application/json' } });
-                if (res.ok) {
-                    const cfg = await res.json();
-                    if (!cfg.authorization_endpoint || !cfg.token_endpoint) throw new Error('Discovery missing endpoints');
-                    const out = {
-                        authorization_endpoint: cfg.authorization_endpoint,
-                        token_endpoint: cfg.token_endpoint,
-                        revocation_endpoint: cfg.revocation_endpoint || ''
-                    };
-                    try { sessionStorage.setItem(cacheKey, JSON.stringify(out)); } catch(_) {}
-                    return out;
+                if (!token) {
+                    localStorage.removeItem('oauthAccessToken');
+                    localStorage.removeItem(AUTH_SOURCE_KEY);
                 } else {
-                    throw new Error(`Discovery failed (${res.status})`);
+                    localStorage.setItem('oauthAccessToken', token);
+                    localStorage.setItem(AUTH_SOURCE_KEY, source);
                 }
-            } catch(err) {
-                // CORS fallback via proxy
-                try {
-                    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(wellKnown)}`;
-                    showToast('Direct discovery blocked. Retrying via proxy…', 'info', 1800);
-                    const pRes = await fetch(proxyUrl, { headers: { 'Accept': 'application/json' } });
-                    if (pRes.ok) {
-                        const cfg = await pRes.json();
-                        if (!cfg.authorization_endpoint || !cfg.token_endpoint) throw new Error('Proxy discovery missing endpoints');
-                        const out = {
-                            authorization_endpoint: cfg.authorization_endpoint,
-                            token_endpoint: cfg.token_endpoint,
-                            revocation_endpoint: cfg.revocation_endpoint || ''
-                        };
-                        try { sessionStorage.setItem(cacheKey, JSON.stringify(out)); } catch(_) {}
-                        showToast('Discovery successful via proxy', 'success', 1600);
-                        return out;
-                    }
-                } catch(proxyErr) { console.warn('Proxy discovery failed', proxyErr); }
-            }
-            throw new Error('OIDC discovery failed (direct and proxy).');
+            } catch(_) {}
         }
-
-        function randomString(len=64){
-            const arr = new Uint8Array(len);
-            crypto.getRandomValues(arr);
-            return Array.from(arr).map(b => ('0' + b.toString(16)).slice(-2)).join('');
-        }
-        async function sha256(base) { const enc = new TextEncoder(); const data = enc.encode(base); const hash = await crypto.subtle.digest('SHA-256', data); return new Uint8Array(hash); }
-        function base64url(buf){
-            let str = btoa(String.fromCharCode.apply(null, Array.from(buf))); return str.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-        }
-
-        function getClientId(){ try { return localStorage.getItem('oauthClientId') || ''; } catch(_) { return ''; } }
-        function getRedirectUri(){
+        function clearAccessToken(){
             try {
-                const v = localStorage.getItem('oauthRedirectUri');
-                if (v && /^https?:\/\//i.test(v)) return v;
-            } catch(_){ }
-            // Default to current page if served via http(s)
-            if (window.location.protocol === 'http:' || window.location.protocol === 'https:') return window.location.origin + window.location.pathname;
+                localStorage.removeItem('oauthAccessToken');
+                localStorage.removeItem(AUTH_SOURCE_KEY);
+            } catch(_) {}
+        }
+        function getTokenSource(){ try { return localStorage.getItem(AUTH_SOURCE_KEY) || 'oauth'; } catch(_) { return 'oauth'; } }
+
+        function getSparqlEndpoint(){
+            const input = document.getElementById('sparql-endpoint');
+            const val = input?.value?.trim();
+            if (val) return val;
+            try { return localStorage.getItem('sparqlEndpoint') || ''; } catch(_) { return ''; }
+        }
+        function getEndpointOrigin(){
+            const endpoint = getSparqlEndpoint();
+            if (!endpoint) return '';
+            try { const url = new URL(endpoint); return `${url.protocol}//${url.host}`; } catch(_) { return ''; }
+        }
+        function getStoredClientId(){ try { return (localStorage.getItem('oauthClientId') || '').trim(); } catch(_) { return ''; } }
+        function getStoredRedirectUri(){
+            try {
+                const stored = (localStorage.getItem('oauthRedirectUri') || '').trim();
+                if (stored) return stored;
+            } catch(_) {}
+            if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+                return window.location.origin + window.location.pathname;
+            }
             return '';
         }
 
-        async function dynamicRegisterIfAvailable(endpoints){
-            if (!endpoints || !endpoints.registration_endpoint) return null;
+        function setAuthStatus(message, tone = 'info'){
+            const el = document.getElementById('auth-status-msg');
+            if (!el) return;
+            const base = 'px-2 text-xs leading-snug';
+            const palette = {
+                success: 'text-green-600',
+                error: 'text-red-600',
+                warn: 'text-amber-600',
+                info: 'text-gray-600'
+            };
+            el.className = `${base} ${palette[tone] || palette.info}`;
+            el.textContent = message || '';
+        }
+
+        function updateAccountUi(forceState){
+            const statusEl = document.getElementById('acct-status');
+            const loginBtn = document.getElementById('oauth-login-btn');
+            const logoutBtn = document.getElementById('acct-logout');
+            const source = getTokenSource();
+            const authed = (typeof forceState === 'boolean') ? forceState : !!getAccessToken();
+            if (statusEl) {
+                statusEl.textContent = authed ? `Signed in (${source === 'bearer' ? 'Bearer token' : 'OAuth'})` : 'Not signed in';
+            }
+            if (loginBtn) {
+                loginBtn.textContent = authed && source === 'oauth' ? 'Re-authenticate' : 'Log In';
+                loginBtn.disabled = false;
+            }
+            if (logoutBtn) {
+                logoutBtn.classList.toggle('hidden', !authed);
+            }
+        }
+
+        function triggerAuthFlowComplete(){
+            const btn = document.getElementById('qs-auth-and-create');
+            if (btn) btn.dispatchEvent(new Event('click'));
+        }
+
+        function clearOAuthSession(){
             try {
-                showToast('Registering OAuth client…', 'info', 1600);
-                const regResponse = await fetch(endpoints.registration_endpoint, {
+                sessionStorage.removeItem('pkce_verifier');
+                sessionStorage.removeItem('oauth_state_nonce');
+                sessionStorage.removeItem('oauth_client_id');
+                sessionStorage.removeItem('oauth_origin');
+            } catch(_) {}
+        }
+
+        function urlSafeBase64(bytes){
+            let str = btoa(String.fromCharCode(...new Uint8Array(bytes)));
+            return str.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+        }
+
+        async function generatePkceChallenge(){
+            const random = crypto.getRandomValues(new Uint8Array(32));
+            const verifier = urlSafeBase64(random);
+            const encoder = new TextEncoder();
+            const digest = await crypto.subtle.digest('SHA-256', encoder.encode(verifier));
+            const challenge = urlSafeBase64(digest);
+            return { verifier, challenge };
+        }
+
+        async function dynamicRegisterClient(registrationEndpoint, redirectUri){
+            if (!registrationEndpoint) return null;
+            try {
+                setAuthStatus('Attempting dynamic client registration…', 'info');
+                const res = await fetch(registrationEndpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        client_name: 'SPARQL Visualizer',
-                        redirect_uris: [getRedirectUri()],
+                        client_name: 'SPARQLWorks',
+                        redirect_uris: [redirectUri],
                         grant_types: ['authorization_code'],
                         token_endpoint_auth_method: 'none'
                     })
                 });
-                if (!regResponse.ok) return null;
-                const regData = await regResponse.json();
-                return regData?.client_id || null;
-            } catch(_) { return null; }
+                if (!res.ok) return null;
+                const data = await res.json();
+                if (data?.client_id) {
+                    try { localStorage.setItem('oauthClientId', data.client_id); } catch(_) {}
+                    return data.client_id;
+                }
+            } catch(err) {
+                console.warn('Dynamic client registration failed', err);
+            }
+            return null;
         }
 
-        async function startOAuthLogin(){
-            const origin = baseOriginFromEndpoint(); if (!origin) { showToast('Set a valid SPARQL endpoint first', 'error'); return; }
-            // Force fresh discovery each login attempt for this origin
-            try { sessionStorage.removeItem(`oidc_discovery_${origin}`); } catch(_) {}
+        async function discoverOAuthEndpoints(origin, statusEl){
+            if (!origin) throw new Error('Set a valid SPARQL endpoint URL first.');
+            const cacheKey = `sparqlworks.oidc.${origin}`;
             try {
-                const disc = await discoverOAuthEndpoints(origin);
-                const authorize = disc.authorization_endpoint;
-                const redirectUri = getRedirectUri();
-                if (!/^https?:\/\//i.test(redirectUri)) { showToast('Redirect URI must be an http(s) URL (configure in Settings)', 'error'); return; }
-                // Determine client_id via dynamic registration or manual settings
-                let clientId = await dynamicRegisterIfAvailable(disc);
-                if (!clientId) {
-                    clientId = getClientId();
+                const cached = sessionStorage.getItem(cacheKey);
+                if (cached) return JSON.parse(cached);
+            } catch(_) {}
+            const discoveryUrl = `${origin.replace(/\/$/, '')}/.well-known/openid-configuration`;
+            const parseResponse = async (response, viaProxy = false) => {
+                let json;
+                try {
+                    json = await response.json();
+                } catch(_) {
+                    throw new Error('Discovery document is not valid JSON.');
                 }
-                if (!clientId) {
-                    showToast('Provider does not support dynamic registration. Set OAuth Client ID in Settings.', 'error', 4000);
-                    return;
+                if (!json.authorization_endpoint || !json.token_endpoint) {
+                    throw new Error('Discovery document is missing required endpoints.');
                 }
-                const state = randomString(16);
-                const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
-                const challenge = base64url(await sha256(verifier));
-                sessionStorage.setItem('pkce_verifier', verifier);
-                sessionStorage.setItem('oauth_state', state);
-                // Build rich state like OPAL: include origin and nonce
-                const stateObj = { nonce: state, origin: origin };
-                const encodedState = btoa(JSON.stringify(stateObj));
-                sessionStorage.setItem('oauth_state_nonce', state);
-                sessionStorage.setItem('oauth_client_id', clientId);
-                const url = new URL(authorize);
-                url.searchParams.set('response_type','code');
-                url.searchParams.set('client_id', clientId);
-                url.searchParams.set('redirect_uri', redirectUri);
-                url.searchParams.set('code_challenge', challenge);
-                url.searchParams.set('code_challenge_method','S256');
-                url.searchParams.set('scope','openid profile email');
-                url.searchParams.set('state', encodedState);
-                showToast('Redirecting to authorize…', 'info', 1200);
-                window.location.href = url.toString();
-            } catch (e) {
-                console.error(e);
-                showToast(`OAuth discovery failed: ${e.message}`, 'error', 4000);
+                try { sessionStorage.setItem(cacheKey, JSON.stringify(json)); } catch(_) {}
+                if (viaProxy) setAuthStatus('Discovery successful via proxy.', 'success');
+                return json;
+            };
+            try {
+                const res = await fetch(discoveryUrl, { headers: { 'Accept': 'application/json' } });
+                if (res.ok) {
+                    return await parseResponse(res);
+                }
+                throw new Error(`Discovery failed (HTTP ${res.status}).`);
+            } catch(err) {
+                if (err instanceof TypeError) {
+                    setAuthStatus('Discovery blocked by CORS. Retrying via proxy…', 'warn');
+                    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(discoveryUrl)}`;
+                    const proxyRes = await fetch(proxyUrl, { headers: { 'Accept': 'application/json' } });
+                    if (proxyRes.ok) {
+                        return await parseResponse(proxyRes, true);
+                    }
+                    throw new Error(`Proxy discovery failed (HTTP ${proxyRes.status}).`);
+                }
+                throw err;
             }
         }
 
-        async function handleOAuthRedirect(){
+        async function handleOAuthLogin(button){
+            const originalText = button?.textContent;
+            if (button) button.disabled = true;
+            try {
+                const origin = getEndpointOrigin();
+                if (!origin) {
+                    setAuthStatus('Set a valid SPARQL endpoint URL before logging in.', 'error');
+                    return;
+                }
+                setAuthStatus('Discovering OAuth endpoints…', 'info');
+                const endpoints = await discoverOAuthEndpoints(origin, document.getElementById('auth-status-msg'));
+                const redirectUri = getStoredRedirectUri();
+                if (!redirectUri) {
+                    setAuthStatus('Redirect URI is required (configure in OAuth Settings).', 'error');
+                    return;
+                }
+                let clientId = await dynamicRegisterClient(endpoints.registration_endpoint, redirectUri);
+                if (!clientId) clientId = getStoredClientId();
+                if (!clientId) {
+                    setAuthStatus('Provider requires a client ID. Open OAuth Settings to supply one.', 'error');
+                    return;
+                }
+                const { verifier, challenge } = await generatePkceChallenge();
+                const nonce = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+                sessionStorage.setItem('pkce_verifier', verifier);
+                sessionStorage.setItem('oauth_state_nonce', nonce);
+                sessionStorage.setItem('oauth_client_id', clientId);
+                sessionStorage.setItem('oauth_origin', origin);
+                // Capture the full permalink at click time to ensure we can return to the exact state
+                try { syncUrlToUi(); } catch(_) {}
+                const returnto = window.location.href;
+                const state = btoa(JSON.stringify({ nonce, origin, returnto }));
+                const params = new URLSearchParams({
+                    response_type: 'code',
+                    client_id: clientId,
+                    redirect_uri: redirectUri,
+                    scope: 'openid profile email',
+                    code_challenge: challenge,
+                    code_challenge_method: 'S256',
+                    state
+                });
+                setAuthStatus('Redirecting to provider…', 'info');
+                window.location.href = `${endpoints.authorization_endpoint}?${params.toString()}`;
+            } catch(err) {
+                console.error('OAuth login failed', err);
+                setAuthStatus(`OAuth login failed: ${err.message}`, 'error');
+            } finally {
+                if (button) {
+                    button.disabled = false;
+                    button.textContent = originalText;
+                }
+            }
+        }
+
+        async function handleOAuthCallback(){
             const params = new URLSearchParams(window.location.search);
-            const code = params.get('code'); const encodedState = params.get('state');
+            const code = params.get('code');
+            const encodedState = params.get('state');
             if (!code) return;
             try {
-                // Parse state and validate nonce
-                if (!encodedState) throw new Error('Missing state');
-                let parsed = null;
-                try { parsed = JSON.parse(atob(encodedState)); } catch(_) { throw new Error('Invalid state format'); }
-                const { nonce, origin } = parsed || {};
-                const storedNonce = sessionStorage.getItem('oauth_state_nonce');
-                if (!nonce || nonce !== storedNonce) throw new Error('State nonce mismatch');
-                if (!origin) throw new Error('Missing origin in state');
-                const verifier = sessionStorage.getItem('pkce_verifier');
-                const clientId = sessionStorage.getItem('oauth_client_id');
-                if (!verifier || !clientId) throw new Error('OAuth verifier or client_id missing');
-                const disc = await discoverOAuthEndpoints(origin);
-                const tokenUrl = disc.token_endpoint;
-                const redirectUri = getRedirectUri();
-                const body = new URLSearchParams();
-                body.set('grant_type','authorization_code');
-                body.set('code', code);
-                body.set('redirect_uri', redirectUri);
-                body.set('client_id', clientId);
-                body.set('code_verifier', verifier || '');
-                const res = await fetch(tokenUrl, { method: 'POST', headers: { 'Content-Type':'application/x-www-form-urlencoded' }, body: body.toString() });
-                if (!res.ok) throw new Error('Token exchange failed: ' + res.status);
-                const tok = await res.json();
-                if (tok && tok.access_token) { setAccessToken(tok.access_token); updateAccountUi(true); showToast('Signed in', 'success'); }
-            } catch(err){ console.error(err); showToast('OAuth sign-in failed: ' + err.message, 'error'); }
-            finally {
-                // Clean query params
-                const url = new URL(window.location.href); url.searchParams.delete('code'); url.searchParams.delete('state'); history.replaceState(null,'',url.toString());
-                // Clear transient session data
+                if (!encodedState) throw new Error('Missing OAuth state.');
+                let decoded;
                 try {
-                    sessionStorage.removeItem('pkce_verifier');
-                    sessionStorage.removeItem('oauth_state');
-                    sessionStorage.removeItem('oauth_state_nonce');
+                    decoded = JSON.parse(atob(encodedState));
+                } catch(_) {
+                    throw new Error('Invalid state payload.');
+                }
+                const storedNonce = sessionStorage.getItem('oauth_state_nonce');
+                if (!decoded?.nonce || decoded.nonce !== storedNonce) throw new Error('State nonce mismatch.');
+                const origin = decoded.origin || sessionStorage.getItem('oauth_origin') || getEndpointOrigin();
+                const verifier = sessionStorage.getItem('pkce_verifier');
+                const clientId = sessionStorage.getItem('oauth_client_id') || getStoredClientId();
+                if (!verifier || !clientId) throw new Error('OAuth session expired. Please try again.');
+                setAuthStatus('Exchanging authorization code for token…', 'info');
+                const endpoints = await discoverOAuthEndpoints(origin, document.getElementById('auth-status-msg'));
+                const redirectUri = getStoredRedirectUri();
+                const tokenRes = await fetch(endpoints.token_endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        grant_type: 'authorization_code',
+                        code,
+                        redirect_uri: redirectUri,
+                        client_id: clientId,
+                        code_verifier: verifier
+                    }).toString()
+                });
+                if (!tokenRes.ok) {
+                    let detail = '';
+                    try { const errJson = await tokenRes.json(); detail = errJson.error_description || errJson.error || ''; } catch(_) {}
+                    throw new Error(detail || `Token exchange failed (HTTP ${tokenRes.status}).`);
+                }
+                const tokenData = await tokenRes.json();
+                if (!tokenData.access_token) throw new Error('Token response missing access_token.');
+                setAccessToken(tokenData.access_token, 'oauth');
+                updateAccountUi(true);
+                setAuthStatus('OAuth login successful. Validating credentials…', 'success');
+                showToast('OAuth login successful', 'success');
+                triggerAuthFlowComplete();
+            } catch(err) {
+                console.error('OAuth callback failed', err);
+                setAuthStatus(`OAuth callback failed: ${err.message}`, 'error');
+                updateAccountUi(false);
+            } finally {
+                clearOAuthSession();
+                try {
+                    // Prefer redirecting to the captured permalink if provided in state
+                    let rt = '';
+                    try {
+                        const s = new URLSearchParams(window.location.search).get('state');
+                        if (s) { const d = JSON.parse(atob(s)); rt = d?.returnto || ''; }
+                    } catch(_) {}
+                    if (rt) {
+                        window.location.replace(rt);
+                    } else {
+                        const clean = new URL(window.location.href);
+                        clean.searchParams.delete('code');
+                        clean.searchParams.delete('state');
+                        history.replaceState(null, '', clean.toString());
+                    }
                 } catch(_) {}
             }
         }
 
-        function updateAccountUi(isAuthed){
-            const statusEl = document.getElementById('acct-status');
-            const btnLogin = document.getElementById('acct-login');
-            const btnLogout = document.getElementById('acct-logout');
-            if (statusEl) statusEl.textContent = isAuthed ? 'Signed in' : 'Not signed in';
-            if (btnLogin) btnLogin.classList.toggle('hidden', !!isAuthed);
-            if (btnLogout) btnLogout.classList.toggle('hidden', !isAuthed);
+        async function handleAuthAndCreate(){
+            const endpoint = getSparqlEndpoint();
+            const token = getAccessToken();
+            if (!endpoint) {
+                setAuthStatus('Set a SPARQL endpoint before validating credentials.', 'error');
+                return;
+            }
+            if (!token) {
+                setAuthStatus('No credentials stored. Provide a bearer token or sign in with OAuth.', 'error');
+                return;
+            }
+            setAuthStatus('Validating credentials against the SPARQL endpoint…', 'info');
+            updateAccountUi(true);
+            try {
+                let probe;
+                try {
+                    probe = await fetch(endpoint, { method: 'HEAD', headers: { 'Authorization': `Bearer ${token}` } });
+                } catch(_) {
+                    probe = await fetch(endpoint, { method: 'OPTIONS', headers: { 'Authorization': `Bearer ${token}` } });
+                }
+                if (probe.status === 401 || probe.status === 403) {
+                    throw new Error(`Endpoint rejected the token (HTTP ${probe.status}).`);
+                }
+                if (!probe.ok && ![400, 405].includes(probe.status)) {
+                    throw new Error(`Validation probe failed (HTTP ${probe.status}).`);
+                }
+                const src = getTokenSource();
+                setAuthStatus(`Credentials stored (${src === 'bearer' ? 'Bearer token' : 'OAuth'}). Queries will include Authorization headers.`, 'success');
+            } catch(err) {
+                console.warn('Credential validation warning', err);
+                setAuthStatus(`Could not validate credentials (${err.message}). Token saved and will be used when querying.`, 'warn');
+            }
         }
 
-        // Account menu dropdown toggle and outside-click close
         (function setupAccountMenu(){
             const btn = document.getElementById('account-button');
             const menu = document.getElementById('account-menu');
-            if (!btn || !menu) return;
-            btn.addEventListener('click', (e) => { e.stopPropagation(); menu.classList.toggle('hidden'); });
-            document.addEventListener('click', (e) => { if (!menu.classList.contains('hidden')) { const within = menu.contains(e.target) || btn.contains(e.target); if (!within) menu.classList.add('hidden'); } });
-            document.addEventListener('keydown', (e) => { if (e.key === 'Escape') menu.classList.add('hidden'); });
-            const loginBtn = document.getElementById('acct-login');
+            const loginBtn = document.getElementById('oauth-login-btn');
             const logoutBtn = document.getElementById('acct-logout');
             const settingsBtn = document.getElementById('acct-settings');
-            if (loginBtn) loginBtn.addEventListener('click', () => { menu.classList.add('hidden'); startOAuthLogin(); });
-            if (logoutBtn) logoutBtn.addEventListener('click', () => { clearAccessToken(); updateAccountUi(false); menu.classList.add('hidden'); showToast('Signed out', 'info'); });
-            if (settingsBtn) settingsBtn.addEventListener('click', () => {
-                menu.classList.add('hidden');
-                const modal = document.getElementById('solid-settings-modal');
-                const cid = document.getElementById('oauth-client-id');
-                const ruri = document.getElementById('oauth-redirect-uri');
-                if (cid) { cid.value = getClientId() || ''; }
-                if (ruri) { ruri.value = (localStorage.getItem('oauthRedirectUri') || getRedirectUri() || ''); }
-                modal.classList.remove('hidden');
+            const tokenBtn = document.getElementById('acct-token-btn');
+            const tokenModal = document.getElementById('token-modal');
+            const tokenTextarea = document.getElementById('token-input');
+            const tokenSave = document.getElementById('token-save');
+            const tokenCancel = document.getElementById('token-cancel');
+            const tokenVisToggle = document.getElementById('token-visibility-toggle');
+            const authCreateBtn = document.getElementById('qs-auth-and-create');
+
+            if (!btn || !menu) return;
+
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                menu.classList.toggle('hidden');
             });
-            // Modal wiring
-            const modal = document.getElementById('solid-settings-modal');
-            if (modal) {
-                modal.addEventListener('click', (e) => { if (e.target?.dataset?.close) modal.classList.add('hidden'); });
+
+            document.addEventListener('click', (e) => {
+                if (!menu.classList.contains('hidden')) {
+                    const within = menu.contains(e.target) || btn.contains(e.target);
+                    if (!within) menu.classList.add('hidden');
+                }
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') menu.classList.add('hidden');
+            });
+
+            const closeTokenModal = () => tokenModal?.classList.add('hidden');
+            const openTokenModal = () => {
+                if (!tokenModal) return;
+                if (tokenTextarea) tokenTextarea.value = '';
+                // Reset to hidden state by default
+                try {
+                    tokenTextarea.type = 'password';
+                    if (tokenVisToggle) {
+                        tokenVisToggle.dataset.visible = '0';
+                        tokenVisToggle.title = 'Show token';
+                        tokenVisToggle.setAttribute('aria-label', 'Show token');
+                        tokenVisToggle.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+                    }
+                } catch(_) {}
+                tokenModal.classList.remove('hidden');
+            };
+
+            if (tokenModal) {
+                tokenModal.addEventListener('click', (evt) => {
+                    if (evt.target?.dataset?.tokenClose) closeTokenModal();
+                });
+            }
+            // Show/Hide token contents
+            if (tokenVisToggle && tokenTextarea) {
+                const EYE = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+                const EYE_OFF = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.77 21.77 0 0 1 5.06-6.94"/><path d="M1 1l22 22"/><path d="M9.88 9.88A3 3 0 0 0 12 15a3 3 0 0 0 2.12-.88"/><path d="M14.12 14.12 9.88 9.88"/><path d="M10.73 5.08A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.8 21.8 0 0 1-3.17 4.49"/></svg>';
+                tokenVisToggle.addEventListener('click', () => {
+                    const visible = tokenVisToggle.dataset.visible === '1';
+                    if (visible) {
+                        tokenTextarea.type = 'password';
+                        tokenVisToggle.dataset.visible = '0';
+                        tokenVisToggle.title = 'Show token';
+                        tokenVisToggle.setAttribute('aria-label', 'Show token');
+                        tokenVisToggle.innerHTML = EYE;
+                    } else {
+                        tokenTextarea.type = 'text';
+                        tokenVisToggle.dataset.visible = '1';
+                        tokenVisToggle.title = 'Hide token';
+                        tokenVisToggle.setAttribute('aria-label', 'Hide token');
+                        tokenVisToggle.innerHTML = EYE_OFF;
+                    }
+                });
+            }
+            if (tokenCancel) {
+                tokenCancel.addEventListener('click', (evt) => {
+                    evt.preventDefault();
+                    closeTokenModal();
+                });
+            }
+
+            if (loginBtn) {
+                loginBtn.addEventListener('click', (e) => {
+                    menu.classList.add('hidden');
+                    handleOAuthLogin(e.target);
+                });
+            }
+
+            if (logoutBtn) {
+                logoutBtn.addEventListener('click', () => {
+                    clearAccessToken();
+                    updateAccountUi(false);
+                    setAuthStatus('Signed out. Queries will run without credentials.', 'info');
+                    showToast('Signed out', 'info');
+                    menu.classList.add('hidden');
+                });
+            }
+
+            if (settingsBtn) {
+                settingsBtn.addEventListener('click', () => {
+                    const modal = document.getElementById('solid-settings-modal');
+                    const cid = document.getElementById('oauth-client-id');
+                    const ruri = document.getElementById('oauth-redirect-uri');
+                    if (cid) cid.value = getStoredClientId();
+                    if (ruri) ruri.value = getStoredRedirectUri();
+                    modal?.classList.remove('hidden');
+                    menu.classList.add('hidden');
+                });
+            }
+
+            if (tokenBtn) {
+                tokenBtn.addEventListener('click', () => {
+                    openTokenModal();
+                    menu.classList.add('hidden');
+                });
+            }
+
+            if (tokenSave) {
+                tokenSave.addEventListener('click', () => {
+                    const token = tokenTextarea?.value?.trim();
+                    if (!token) {
+                        setAuthStatus('Token cannot be empty.', 'error');
+                        return;
+                    }
+                    setAccessToken(token, 'bearer');
+                    updateAccountUi(true);
+                    closeTokenModal();
+                    setAuthStatus('Bearer token saved. Validating credentials…', 'info');
+                    showToast('Bearer token saved locally', 'success');
+                    triggerAuthFlowComplete();
+                });
+            }
+
+            const settingsModal = document.getElementById('solid-settings-modal');
+            if (settingsModal) {
+                settingsModal.addEventListener('click', (evt) => {
+                    if (evt.target?.dataset?.close) settingsModal.classList.add('hidden');
+                });
                 const saveBtn = document.getElementById('solid-settings-save');
                 const cancelBtn = document.getElementById('solid-settings-cancel');
                 const cid = document.getElementById('oauth-client-id');
                 const ruri = document.getElementById('oauth-redirect-uri');
-                if (saveBtn) saveBtn.addEventListener('click', () => {
-                    if (cid) localStorage.setItem('oauthClientId', cid.value.trim());
-                    if (ruri) localStorage.setItem('oauthRedirectUri', ruri.value.trim());
-                    modal.classList.add('hidden');
-                    showToast('OAuth settings saved', 'success');
-                });
-                if (cancelBtn) cancelBtn.addEventListener('click', () => modal.classList.add('hidden'));
+                if (saveBtn) {
+                    saveBtn.addEventListener('click', () => {
+                        if (cid) localStorage.setItem('oauthClientId', cid.value.trim());
+                        if (ruri) localStorage.setItem('oauthRedirectUri', ruri.value.trim());
+                        settingsModal.classList.add('hidden');
+                        showToast('OAuth settings saved', 'success');
+                    });
+                }
+                if (cancelBtn) {
+                    cancelBtn.addEventListener('click', () => settingsModal.classList.add('hidden'));
+                }
             }
-            updateAccountUi(!!getAccessToken());
-            // If redirected back with code, attempt token exchange
-            handleOAuthRedirect();
+
+            if (authCreateBtn) {
+                authCreateBtn.addEventListener('click', () => handleAuthAndCreate());
+            }
+
+            updateAccountUi();
+            if (getAccessToken()) {
+                setAuthStatus('Using stored credentials for SPARQL queries.', 'success');
+            } else {
+                setAuthStatus('Queries will run without credentials until you sign in.', 'info');
+            }
+            handleOAuthCallback();
         })();
 
         // Detect symmetric predicates that should render double-headed arrows
@@ -3502,6 +3921,14 @@ function normalizePredicate(pred) {
 
         // Keep Advanced query in sync with Basic WHERE clause
         function syncAdvancedFromBasic() {
+            // If a programmatic Basic set just happened, skip one mirror cycle
+            try {
+                if (window.__suppressNextBasicToAdvancedSync) { window.__suppressNextBasicToAdvancedSync = false; return; }
+            } catch(_) {}
+            // If Advanced was loaded from URL in advanced mode, block any Basic->Advanced mirroring
+            try {
+                if (window.__lockAdvancedFromUrl === true) return;
+            } catch(_) {}
             const whereText = (basicAce ? basicAce.getValue() : '').trim();
             const limit = parseInt(document.getElementById('basic-limit').value, 10) || 200;
             if (!advAce) return;
