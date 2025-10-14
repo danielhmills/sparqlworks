@@ -56,11 +56,94 @@
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        :root {
+            /* Premium Color Palette - iOS/macOS Inspired */
+            --color-bg-primary: #f5f5f7;
+            --color-bg-secondary: #fafafa;
+            --color-bg-tertiary: #ffffff;
+            --color-surface: rgba(255, 255, 255, 0.78);
+            --color-surface-elevated: rgba(255, 255, 255, 0.88);
+            --color-surface-premium: rgba(255, 255, 255, 0.95);
+            --color-border-light: rgba(0, 0, 0, 0.04);
+            --color-border-medium: rgba(0, 0, 0, 0.08);
+            --color-border-strong: rgba(0, 0, 0, 0.12);
+            --color-separator: rgba(60, 60, 67, 0.12);
+            
+            /* Typography - SF Pro System */
+            --color-text-primary: #1d1d1f;
+            --color-text-secondary: #6e6e73;
+            --color-text-tertiary: #86868b;
+            --color-text-quaternary: #aeaeb2;
+            --color-text-inverted: #ffffff;
+            
+            /* Accent Colors - iOS Blue */
+            --color-accent-blue: #007aff;
+            --color-accent-blue-hover: #0051d5;
+            --color-accent-blue-active: #004fc4;
+            --color-accent-blue-light: rgba(0, 122, 255, 0.1);
+            --color-accent-blue-medium: rgba(0, 122, 255, 0.2);
+            
+            /* Semantic Colors */
+            --color-success: #34c759;
+            --color-warning: #ff9500;
+            --color-error: #ff3b30;
+            --color-info: #5ac8fa;
+            
+            /* Premium Shadows - Multi-layer depth */
+            --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.03);
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+            --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+            --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.08);
+            --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.16), 0 8px 24px rgba(0, 0, 0, 0.12);
+            --shadow-2xl: 0 32px 80px rgba(0, 0, 0, 0.20), 0 12px 32px rgba(0, 0, 0, 0.14);
+            
+            /* Transitions*/
+            --transition-instant: 100ms cubic-bezier(0.4, 0, 1, 1);
+            --transition-fast: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-base: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-smooth: 400ms cubic-bezier(0.4, 0, 0.1, 1);
+            --transition-slow: 500ms cubic-bezier(0.25, 0.1, 0.25, 1);
+            --spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            
+            /* Border Radius - 8pt grid system */
+            --radius-xs: 6px;
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 20px;
+            --radius-2xl: 24px;
+            --radius-3xl: 28px;
+            --radius-full: 9999px;
+            
+            /* Spacing - 8pt grid */
+            --space-1: 4px;
+            --space-2: 8px;
+            --space-3: 12px;
+            --space-4: 16px;
+            --space-5: 20px;
+            --space-6: 24px;
+            --space-8: 32px;
+            --space-10: 40px;
+            --space-12: 48px;
+            
+            /* Blur Effects */
+            --blur-sm: 8px;
+            --blur-md: 16px;
+            --blur-lg: 24px;
+            --blur-xl: 32px;
+        }
+
+        /* =====  TYPOGRAPHY & BASE ===== */
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             overflow: hidden;
-            background-color: #f2f2f7; /* iOS grouped background */
-            color: #1c1c1e; /* iOS label color */
+            background: linear-gradient(135deg, #f5f5f7 0%, #ebebf0 50%, #e8e8ed 100%);
+            background-attachment: fixed;
+            color: var(--color-text-primary);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeLegibility;
+            font-feature-settings: "kern" 1, "liga" 1;
         }
 
         .graph-container {
@@ -68,19 +151,40 @@
             height: 100vh;
             position: relative;
             cursor: move;
+            background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
         }
 
+        /* =====  GRAPH VISUALIZATION ===== */
         .links line {
-            stroke: #999;
-            stroke-opacity: 0.6;
-            stroke-width: 2.5; /* thicker edges */
+            stroke: #c7c7cc;
+            stroke-opacity: 0.45;
+            stroke-width: 2;
+            stroke-linecap: round;
+            transition: stroke var(--transition-base), stroke-opacity var(--transition-base), stroke-width var(--transition-fast);
+        }
+
+        .links line:hover {
+            stroke: var(--color-accent-blue);
+            stroke-opacity: 0.85;
+            stroke-width: 2.5;
         }
 
         .nodes circle {
             stroke: #fff;
-            stroke-width: 1.5px;
-            transition: r 0.2s ease-in-out;
+            stroke-width: 2.5px;
+            transition: all var(--transition-base);
             cursor: pointer;
+            filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.12)) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.08));
+        }
+
+        .nodes circle:hover {
+            stroke-width: 3.5px;
+            filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.18)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.12));
+        }
+
+        .nodes circle:active {
+            transform: scale(0.98);
+            transition: transform var(--transition-instant);
         }
 
         .node-label-group {
@@ -88,45 +192,72 @@
         }
 
         .node-label-group text {
-            font-size: 13px; /* larger labels */
-            fill: #333;
+            font-size: 13px;
+            font-weight: 510;
+            fill: var(--color-text-primary);
+            letter-spacing: -0.02em;
+            paint-order: stroke fill;
+            stroke: rgba(255, 255, 255, 0.9);
+            stroke-width: 3px;
+            stroke-linejoin: round;
+        }
+
+        .node-label-group text.clickable-label {
+            fill: var(--color-text-primary);
+            text-decoration: underline;
+            font-weight: 590;
+            transition: fill var(--transition-base);
+        }
+
+        .clickable-label:hover {
+            fill: var(--color-accent-blue-hover);
         }
 
         .predicate-icon-group {
             cursor: pointer;
-            fill: #555;
+            fill: var(--color-text-secondary);
+            transition: fill var(--transition-base), transform var(--transition-base);
+            filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
         }
 
         .predicate-icon-group:hover {
-            fill: #1d4ed8;
+            fill: var(--color-accent-blue);
+            transform: scale(1.15);
         }
 
-        .clickable-label {
-            text-decoration: underline;
-            fill: #2563eb;
+        .predicate-icon-group:active {
+            transform: scale(1.05);
+            transition: transform var(--transition-instant);
         }
 
         .clickable-label:hover {
-            fill: #1d4ed8;
+            fill: var(--color-accent-blue-hover);
         }
 
+        /* =====  TOOLTIP ===== */
         #tooltip {
             position: absolute;
             visibility: hidden;
-            background-color: rgba(0, 0, 0, 0.85);
-            color: #fff;
-            padding: 8px 12px;
-            border-radius: 6px;
+            background: rgba(28, 28, 30, 0.96);
+            backdrop-filter: blur(var(--blur-lg)) saturate(180%);
+            color: var(--color-text-inverted);
+            padding: var(--space-3) var(--space-4);
+            border-radius: var(--radius-lg);
             font-size: 12px;
+            font-weight: 500;
             max-width: 350px;
+            overflow-wrap: break-word;
             pointer-events: none;
             z-index: 20;
-            transition: opacity 0.2s;
+            box-shadow: var(--shadow-xl), 0 0 0 0.5px rgba(255, 255, 255, 0.1) inset;
+            transition: opacity var(--transition-base);
+            letter-spacing: -0.01em;
         }
 
+        /* =====  FLOATING ACTION BUTTONS ===== */
         #controls-toggle {
             position: absolute;
-            top: 3rem;
+            top: 3.5rem;
             right: 1rem;
             z-index: 15;
         }
@@ -135,72 +266,150 @@
             position: absolute;
             top: 4rem;
             right: 1rem;
-            background: rgba(255, 255, 255, 0.65);
-            backdrop-filter: saturate(180%) blur(12px);
-            border-radius: 1rem; /* iOS rounded */
-            border: 1px solid rgba(255, 255, 255, 0.35);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.08), 0 3px 6px rgba(0,0,0,0.06);
+            background: var(--color-surface-elevated);
+            backdrop-filter: saturate(180%) blur(var(--blur-xl));
+            -webkit-backdrop-filter: saturate(180%) blur(var(--blur-xl));
+            border-radius: var(--radius-2xl);
+            border: 0.5px solid var(--color-border-light);
+            box-shadow: var(--shadow-xl), 0 0 0 0.5px rgba(255, 255, 255, 0.5) inset;
             z-index: 10;
-            max-width: 320px;
+            max-width: 360px;
+            transition: all var(--transition-smooth);
+            will-change: transform, opacity;
         }
 
         .controls-header {
-            padding: 0.75rem 1rem;
-            background-color: rgba(255, 255, 255, 0.6);
-            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+            padding: var(--space-4) var(--space-5);
+            background: var(--color-surface-premium);
+            border-bottom: 0.5px solid var(--color-separator);
             cursor: grab;
+            border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .controls-header:active {
+            cursor: grabbing;
+            background: var(--color-surface-elevated);
         }
 
         .control-group label,
         .legend-item {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            font-size: 0.875rem;
-            text-transform: capitalize;
+            gap: var(--space-2);
+            font-size: 14px;
+            font-weight: 510;
+            color: var(--color-text-primary);
+            letter-spacing: -0.01em;
         }
 
+        /* =====  RANGE SLIDERS ===== */
         .control-group input[type="range"] {
             width: 100%;
+            height: 5px;
+            border-radius: var(--radius-full);
+            background: linear-gradient(to right, var(--color-accent-blue) 0%, #e5e5ea 0%);
+            outline: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            transition: background var(--transition-base);
+        }
+
+        .control-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+            cursor: pointer;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.1), 0 0 0 0.5px rgba(0, 0, 0, 0.05);
+            transition: all var(--transition-base);
+            border: 0.5px solid rgba(0, 0, 0, 0.04);
+        }
+
+        .control-group input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.12);
+            box-shadow: 0 5px 16px rgba(0, 0, 0, 0.2), 0 2px 6px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.05);
+        }
+
+        .control-group input[type="range"]::-webkit-slider-thumb:active {
+            transform: scale(1.05);
+            transition: transform var(--transition-instant);
+        }
+
+        .control-group input[type="range"]::-moz-range-thumb {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+            cursor: pointer;
+            border: 0.5px solid rgba(0, 0, 0, 0.04);
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.1), 0 0 0 0.5px rgba(0, 0, 0, 0.05);
+            transition: all var(--transition-base);
+        }
+
+        .control-group input[type="range"]::-moz-range-thumb:hover {
+            transform: scale(1.12);
+            box-shadow: 0 5px 16px rgba(0, 0, 0, 0.2), 0 2px 6px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.05);
+        }
+
+        .control-group input[type="range"]::-moz-range-thumb:active {
+            transform: scale(1.05);
         }
 
         .filter-group label {
             cursor: pointer;
+            transition: color var(--transition-base);
+        }
+
+        .filter-group label:hover {
+            color: var(--color-accent-blue);
         }
 
         .legend-color-swatch {
-            width: 12px;
-            height: 12px;
+            width: 16px;
+            height: 16px;
             border-radius: 50%;
-            border: 1px solid rgba(0, 0, 0, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.95);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
         }
 
-        /* Lightweight code editor with line numbers */
+        /* =====  CODE EDITOR ===== */
         .code-editor {
             display: grid;
             grid-template-columns: 3rem 1fr;
             width: 100%;
             align-items: stretch;
-            overflow: hidden; /* keep rounded corners clean */
-            border-radius: 0.75rem; /* match rounded-xl */
+            overflow: hidden;
+            border-radius: var(--radius-xl);
         }
+        
         .code-editor .line-numbers {
-            background: rgba(0,0,0,0.04);
-            color: #6b7280; /* gray-500 */
-            padding: 0.75rem 0.5rem; /* match textarea vertical padding */
+            background: rgba(0, 0, 0, 0.025);
+            color: var(--color-text-quaternary);
+            padding: var(--space-3) var(--space-2);
             text-align: right;
             user-select: none;
+            -webkit-user-select: none;
             cursor: pointer;
-            overflow: auto; /* allow scrolling to stay in sync with textarea */
-            border-right: 1px solid rgba(0,0,0,0.06);
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-            font-size: 0.875rem; /* text-sm */
-            line-height: 1.5rem; /* match textarea line-height */
+            overflow: auto;
+            border-right: 0.5px solid var(--color-separator);
+            font-family: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 13px;
+            font-weight: 450;
+            line-height: 1.5rem;
             white-space: pre;
+            letter-spacing: -0.01em;
         }
+        
         .code-editor textarea.editor {
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-            font-size: 0.875rem;
+            font-family: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 13px;
+            font-weight: 450;
             line-height: 1.5rem;
             background: transparent;
             border: 0;
@@ -210,61 +419,149 @@
             tab-size: 2;
             width: 100%;
             display: block;
-            box-sizing: border-box; /* avoid overflow due to padding */
+            box-sizing: border-box;
+            letter-spacing: -0.01em;
         }
 
-        /* Variable suggestions dropdown */
+        /* =====  VARIABLE SUGGESTIONS ===== */
         .var-suggest {
             position: absolute;
             z-index: 50;
-            background: #fff;
-            border: 1px solid rgba(0,0,0,0.1);
-            border-radius: 8px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.12), 0 3px 6px rgba(0,0,0,0.06);
-            padding: 4px;
+            background: var(--color-surface-premium);
+            backdrop-filter: blur(var(--blur-xl)) saturate(180%);
+            -webkit-backdrop-filter: blur(var(--blur-xl)) saturate(180%);
+            border: 0.5px solid var(--color-border-light);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-xl), 0 0 0 0.5px rgba(255, 255, 255, 0.5) inset;
+            padding: var(--space-2);
             min-width: 160px;
             max-width: 280px;
             max-height: 220px;
             overflow-y: auto;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-            font-size: 12px;
+            font-family: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 13px;
+            font-weight: 450;
         }
-        .var-suggest.hidden { display: none; }
-        .var-suggest-item { padding: 6px 8px; border-radius: 6px; cursor: pointer; }
-        .var-suggest-item:hover, .var-suggest-item.active { background: #eef2ff; }
-        /* Controls panel: keep within viewport and allow infinite scroll */
+        
+        .var-suggest.hidden { 
+            display: none; 
+        }
+        
+        .var-suggest-item { 
+            padding: var(--space-2) var(--space-3);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all var(--transition-base);
+            letter-spacing: -0.01em;
+        }
+        
+        .var-suggest-item:hover, 
+        .var-suggest-item.active { 
+            background: var(--color-accent-blue-light);
+            color: var(--color-accent-blue);
+            transform: translateX(2px);
+        }
+
+        /* =====  SCROLLBARS ===== */
         #controls {
             max-height: calc(100vh - 32px);
             overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
         }
+        
+        #controls::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        #controls::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        #controls::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.15);
+            border-radius: var(--radius-full);
+            transition: background var(--transition-base);
+        }
+        
+        #controls::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 0, 0, 0.25);
+        }
+        
         #controls .controls-header {
             position: sticky;
             top: 0;
             z-index: 1;
-            background: rgba(255,255,255,0.85);
-            backdrop-filter: blur(6px);
-            border-bottom: 1px solid rgba(0,0,0,0.05);
+            background: var(--color-surface-premium);
+            backdrop-filter: blur(var(--blur-xl));
+            -webkit-backdrop-filter: blur(var(--blur-xl));
+            border-bottom: 0.5px solid var(--color-separator);
         }
-        /* Ensure Ace shows scrollbars clearly */
-        #basic-editor, #adv-editor { overflow: hidden; }
-        #basic-editor .ace_scrollbar, #adv-editor .ace_scrollbar {
+
+        /* =====  ACE EDITOR ===== */
+        #basic-editor, #adv-editor { 
+            overflow: hidden;
+            border-radius: var(--radius-xl);
+        }
+        
+        #basic-editor .ace_scrollbar, 
+        #adv-editor .ace_scrollbar {
             display: block !important;
             opacity: 1 !important;
         }
-        #basic-editor .ace_scrollbar-v, #adv-editor .ace_scrollbar-v { width: 12px; }
-        #basic-editor .ace_scrollbar-h, #adv-editor .ace_scrollbar-h { height: 12px; }
-        #basic-editor .ace_scrollbar::-webkit-scrollbar, #adv-editor .ace_scrollbar::-webkit-scrollbar {
-            width: 12px; height: 12px;
+        
+        #basic-editor .ace_scrollbar-v, 
+        #adv-editor .ace_scrollbar-v { 
+            width: 8px;
         }
-        #basic-editor .ace_scrollbar::-webkit-scrollbar-thumb, #adv-editor .ace_scrollbar::-webkit-scrollbar-thumb {
-            background-color: rgba(0,0,0,0.25);
-            border-radius: 8px;
+        
+        #basic-editor .ace_scrollbar-h, 
+        #adv-editor .ace_scrollbar-h { 
+            height: 8px;
+        }
+        
+        #basic-editor .ace_scrollbar::-webkit-scrollbar, 
+        #adv-editor .ace_scrollbar::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        #basic-editor .ace_scrollbar::-webkit-scrollbar-thumb, 
+        #adv-editor .ace_scrollbar::-webkit-scrollbar-thumb {
+            background-color: rgba(0, 0, 0, 0.15);
+            border-radius: var(--radius-md);
+            transition: background var(--transition-base);
+        }
+        
+        #basic-editor .ace_scrollbar::-webkit-scrollbar-thumb:hover, 
+        #adv-editor .ace_scrollbar::-webkit-scrollbar-thumb:hover {
+            background-color: rgba(0, 0, 0, 0.25);
         }
 
-        /* Ensure the floating query panel never gets clipped on smaller viewports */
+        /* =====  QUERY PANEL ===== */
         #query-panel {
             max-height: calc(100vh - 2rem);
             overflow: auto;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
+        }
+        
+        #query-panel::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        #query-panel::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        #query-panel::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.15);
+            border-radius: var(--radius-full);
+            transition: background var(--transition-base);
+        }
+        
+        #query-panel::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 0, 0, 0.25);
         }
     </style>
     <!-- Lightweight embedded code editor (Ace) -->
@@ -276,7 +573,7 @@
 <body class="bg-gray-50">
 
     <button id="controls-toggle"
-        class="fixed top-14 right-4 p-2 rounded-full bg-white/70 backdrop-blur-sm shadow-md hover:bg-gray-200 transition-colors z-30">
+        class="fixed top-14 right-4 p-3 rounded-full bg-white/80 backdrop-blur-xl shadow-lg hover:bg-white hover:shadow-xl active:scale-95 transition-all duration-300 z-30 border-0" style="box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.08), 0 0 0 0.5px rgba(255, 255, 255, 0.5) inset;">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-700">
             <path
@@ -288,39 +585,39 @@
 
     <!-- Floating Copy Link icon under the gearbox -->
     <button id="copy-link-fab" title="Copy share link"
-        class="fixed top-24 right-4 p-2 rounded-full bg-white/70 backdrop-blur-sm shadow-md hover:bg-gray-200 transition-colors z-20">
+        class="fixed top-28 right-4 p-3 rounded-full bg-white/80 backdrop-blur-xl shadow-lg hover:bg-white hover:shadow-xl active:scale-95 transition-all duration-300 z-20 border-0" style="box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.08), 0 0 0 0.5px rgba(255, 255, 255, 0.5) inset;">
         <!-- Link icon -->
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-700">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-600">
             <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 5"/>
             <path d="M14 11a5 5 0 0 0-7.07 0L5.5 12.43a5 5 0 0 0 7.07 7.07L14 19"/>
         </svg>
     </button>
 
     <!-- Toast container -->
-    <div id="toast" class="fixed top-4 right-4 z-40 hidden">
-        <div id="toast-inner" class="px-3 py-2 rounded-lg shadow bg-gray-800 text-white text-sm"></div>
+    <div id="toast" class="fixed top-4 right-4 z-50 hidden">
+        <div id="toast-inner" class="px-4 py-3 rounded-2xl shadow-2xl text-white text-sm font-semibold border-0" style="box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24), 0 4px 12px rgba(0, 0, 0, 0.18), 0 0 0 0.5px rgba(255, 255, 255, 0.1) inset; letter-spacing: -0.01em; background: rgba(0, 0, 0, 0.96);"></div>
     </div>
 
     <!-- Error modal for full error details -->
     <div id="error-modal" class="fixed inset-0 z-50 hidden">
-      <div class="absolute inset-0 bg-black/40" data-err-close="1"></div>
+      <div class="absolute inset-0 bg-black/50 backdrop-blur-md" data-err-close="1"></div>
       <div class="absolute inset-0 flex items-center justify-center p-4">
-        <div class="w-[46rem] max-w-full max-h-[85vh] rounded-2xl bg-white shadow-2xl border border-white/40 overflow-hidden flex flex-col">
-          <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <h3 class="text-base font-semibold text-gray-800">Query Error</h3>
+        <div class="w-[46rem] max-w-full max-h-[85vh] rounded-3xl bg-white shadow-2xl border-0 overflow-hidden flex flex-col" style="box-shadow: 0 32px 80px rgba(0, 0, 0, 0.24), 0 12px 32px rgba(0, 0, 0, 0.18), 0 0 0 0.5px rgba(0, 0, 0, 0.04) inset;">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/60">
+            <h3 class="text-lg font-semibold text-gray-900" style="letter-spacing: -0.02em;">Query Error</h3>
             <div class="flex items-center gap-2">
-              <button id="error-copy" class="px-2 py-1 text-xs rounded border hover:bg-gray-100" title="Copy details">Copy</button>
-              <button class="p-2 rounded hover:bg-gray-100" title="Close" data-err-close="1">
+              <button id="error-copy" class="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 hover:bg-gray-50 active:bg-gray-100 transition-colors" title="Copy details">Copy</button>
+              <button class="p-2 rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-colors" title="Close" data-err-close="1">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
             </div>
           </div>
-          <div class="px-4 py-3 text-sm text-gray-700 overflow-auto">
-            <div id="error-summary" class="mb-2 text-red-700 font-medium"></div>
-            <pre id="error-details" class="text-xs bg-gray-50 border border-gray-200 rounded-lg p-3 whitespace-pre-wrap max-h-[65vh] overflow-auto"></pre>
+          <div class="px-5 py-4 text-sm text-gray-700 overflow-auto">
+            <div id="error-summary" class="mb-3 text-red-600 font-semibold"></div>
+            <pre id="error-details" class="text-xs bg-gray-50 border border-gray-200 rounded-xl p-4 whitespace-pre-wrap max-h-[65vh] overflow-auto font-mono"></pre>
           </div>
-          <div class="px-4 py-3 bg-gray-50 flex items-center justify-end gap-2 border-t border-gray-100">
-            <button class="px-3 py-2 rounded bg-white text-gray-800 border hover:bg-gray-100" data-err-close="1">Close</button>
+          <div class="px-5 py-4 bg-gray-50/70 flex items-center justify-end gap-3 border-t border-gray-100">
+            <button class="px-4 py-2 rounded-xl bg-white text-gray-800 font-medium border border-gray-200 hover:bg-gray-50 active:bg-gray-100 transition-colors shadow-sm" data-err-close="1">Close</button>
           </div>
         </div>
       </div>
@@ -328,11 +625,11 @@
 
     <!-- Mode switch warning modal (top-level, not inside hidden containers) -->
     <div id="mode-switch-modal" class="fixed inset-0 z-50 hidden">
-      <div class="absolute inset-0 bg-black/30" data-ms-close="1"></div>
+      <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" data-ms-close="1"></div>
       <div class="absolute inset-0 flex items-center justify-center p-4">
-        <div class="w-[28rem] max-w-full rounded-2xl bg-white shadow-xl border border-white/40 overflow-hidden">
-          <div class="px-4 py-3 border-b border-gray-100">
-            <h3 class="text-base font-semibold text-gray-800">Switch to Basic?</h3>
+        <div class="w-[28rem] max-w-full rounded-3xl bg-white shadow-2xl border border-black/5 overflow-hidden">
+          <div class="px-5 py-4 border-b border-gray-100 bg-gray-50/50">
+            <h3 class="text-lg font-semibold text-gray-900">Switch to Basic?</h3>
           </div>
           <div class="px-4 py-3 text-sm text-gray-700 space-y-3">
             <p>You have changes in the Advanced editor. Editing in Basic will overwrite your Advanced query.</p>
@@ -341,9 +638,9 @@
               <li>Stay on Advanced to keep and continue editing your custom query.</li>
             </ul>
           </div>
-          <div class="px-4 py-3 bg-gray-50 flex items-center justify-end gap-2 border-t border-gray-100">
-            <button id="mode-switch-cancel" class="px-3 py-2 rounded bg-white text-gray-800 border hover:bg-gray-100">Stay on Advanced</button>
-            <button id="mode-switch-proceed" class="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Proceed to Basic</button>
+          <div class="px-5 py-4 bg-gray-50/70 flex items-center justify-end gap-3 border-t border-gray-100">
+            <button id="mode-switch-cancel" class="px-4 py-2 rounded-xl bg-white text-gray-800 font-medium border border-gray-200 hover:bg-gray-50 active:bg-gray-100 transition-colors shadow-sm">Stay on Advanced</button>
+            <button id="mode-switch-proceed" class="px-4 py-2 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 active:bg-blue-800 transition-colors shadow-sm">Proceed to Basic</button>
           </div>
         </div>
       </div>
@@ -351,7 +648,7 @@
 
     <div id="controls" class="controls hidden">
         <div class="controls-header">
-            <h3 class="font-semibold text-gray-700">Controls</h3>
+            <h3 class="text-base font-semibold text-gray-900">Controls</h3>
         </div>
         <div class="p-4">
             <div class="control-group mb-4">
@@ -362,7 +659,7 @@
                 <label for="link-distance">Physics: Link Distance</label>
                 <input type="range" id="link-distance" min="10" max="300" value="180" step="5">
             </div>
-            <hr class="my-4">
+            <hr class="my-4 border-gray-200/60">
             <div class="control-group mb-2">
                 <label class="inline-flex items-center gap-2">
                     <input id="hover-focus-toggle" type="checkbox" class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4" checked>
@@ -383,11 +680,11 @@
                 </label>
             </div>
             <div class="control-group mb-2">
-                <label for="pref-lang" class="block text-sm text-gray-700 mb-1">Preferred Language</label>
-                <input id="pref-lang" type="text" placeholder="e.g., en, fr, de" class="w-full p-1 rounded-md bg-white/80 border border-white/40 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <label for="pref-lang" class="block text-sm font-medium text-gray-700 mb-1.5">Preferred Language</label>
+                <input id="pref-lang" type="text" placeholder="e.g., en, fr, de" class="w-full px-3 py-2 rounded-lg bg-white/90 border border-gray-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
             </div>
             <div class="control-group mb-4">
-                <label class="block text-sm font-semibold text-gray-800 mb-2">URL format</label>
+                <label class="block text-sm font-semibold text-gray-900 mb-2">URL format</label>
                 <div class="flex flex-col gap-2 text-sm">
                     <label class="inline-flex items-center gap-2">
                         <input type="radio" name="url-format" id="url-format-default" value="default" class="text-blue-600 focus:ring-blue-500" />
@@ -398,13 +695,13 @@
                         <span>Virtuoso Entity Description</span>
                     </label>
                     <div class="mt-1">
-                        <label for="describe-base-input" class="block text-xs text-gray-600 mb-1">Describe base (editable)</label>
-                        <input id="describe-base-input" type="text" placeholder="http(s)://host/describe/?uri=" class="w-full p-2 rounded-md bg-white/80 border border-white/40 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <label for="describe-base-input" class="block text-xs font-medium text-gray-600 mb-1.5">Describe base (editable)</label>
+                        <input id="describe-base-input" type="text" placeholder="http(s)://host/describe/?uri=" class="w-full px-3 py-2 rounded-lg bg-white/90 border border-gray-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
                         <p class="text-[11px] text-gray-500 mt-1">Defaults to the current SPARQL endpoint's host. Final URL built as: base + encodeURIComponent(IRI).</p>
                     </div>
                 </div>
             </div>
-            <hr class="my-4">
+            <hr class="my-4 border-gray-200/60">
             <!-- Type filter accordion (moved above Filter by Type) -->
             <div class="type-filter-group">
                 <button id="type-accordion-header" class="w-full flex items-center justify-between px-1 py-2 rounded hover:bg-gray-100">
@@ -420,7 +717,7 @@
                 </div>
             </div>
 
-            <hr class="my-4">
+            <hr class="my-4 border-gray-200/60">
             <!-- Property filter accordion (moved above Filter by Type) -->
             <div class="property-filter-group">
                 <button id="prop-accordion-header" class="w-full flex items-center justify-between px-1 py-2 rounded hover:bg-gray-100">
@@ -436,12 +733,12 @@
                 </div>
             </div>
 
-            <hr class="my-4">
+            <hr class="my-4 border-gray-200/60">
             <div class="filter-group">
                 <h3 class="font-semibold mb-2">Filter by Type</h3>
                 <div id="filter-checkboxes" class="flex flex-col space-y-1"></div>
             </div>
-            <hr class="my-4">
+            <hr class="my-4 border-gray-200/60">
             <div class="mb-3">
                 <label class="inline-flex items-center gap-2">
                     <input id="show-types-toggle" type="checkbox" class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4">
@@ -449,12 +746,12 @@
                 </label>
                 <p class="text-xs text-gray-500 mt-1">When checked, rdf:type nodes and edges are hidden.</p>
             </div>
-            <hr class="my-4">
+            <hr class="my-4 border-gray-200/60">
             <div class="legend-group">
                 <h3 class="font-semibold mb-2">Legend</h3>
                 <div id="color-legend" class="space-y-1"></div>
             </div>
-            <hr class="my-4">
+            <hr class="my-4 border-gray-200/60">
             <div class="control-group mb-3">
                 <label class="block text-sm font-semibold text-gray-800 mb-1">Edge Annotations</label>
                 <div class="flex items-center gap-4 text-sm">
@@ -473,45 +770,45 @@
     </div>
 
     <!-- Account button (auth optional) -->
-    <button id="account-button" title="Account" class="fixed top-2 right-4 p-2 rounded-full bg-white/70 backdrop-blur-sm shadow-md hover:bg-gray-200 transition-colors z-40 border" style="border-color: rgba(0,0,0,0.1);">
-        <svg id="account-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-3-3.87"/><path d="M4 21v-2a4 4 0 0 1 3-3.87"/><circle cx="12" cy="7" r="4"/></svg>
+    <button id="account-button" title="Account" class="fixed top-2 right-4 p-3 rounded-full bg-white/80 backdrop-blur-xl shadow-lg hover:bg-white hover:shadow-xl active:scale-95 transition-all duration-300 z-40 border-0" style="box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.08), 0 0 0 0.5px rgba(255, 255, 255, 0.5) inset;">
+        <svg id="account-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-700"><path d="M20 21v-2a4 4 0 0 0-3-3.87"/><path d="M4 21v-2a4 4 0 0 1 3-3.87"/><circle cx="12" cy="7" r="4"/></svg>
     </button>
-    <div id="account-menu" class="hidden fixed top-20 right-4 z-50 bg-white/95 backdrop-blur-xl rounded-xl border border-white/50 shadow-lg w-64 p-3 space-y-2">
-        <div id="acct-status" class="px-2 py-2 text-sm font-medium text-gray-700">Not signed in</div>
-        <p id="auth-status-msg" class="px-2 text-xs text-gray-600 leading-snug"></p>
-        <div class="border-t my-1"></div>
-        <button id="oauth-login-btn" class="w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm">Log In</button>
-        <button id="acct-token-btn" class="w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm">Provide Bearer token</button>
-        <button id="acct-settings" class="w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm">OAuth Settings</button>
-        <button id="acct-logout" class="w-full text-left px-3 py-2 rounded hover:bg-gray-100 text-sm hidden">Log out</button>
+    <div id="account-menu" class="hidden fixed top-20 right-4 z-50 bg-white/92 backdrop-blur-xl rounded-2xl border-0 shadow-2xl w-64 p-2 space-y-1" style="box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18), 0 4px 16px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(255, 255, 255, 0.5) inset;">
+        <div id="acct-status" class="px-3 py-3 text-sm font-semibold text-gray-900" style="letter-spacing: -0.01em;">Not signed in</div>
+        <p id="auth-status-msg" class="px-3 text-xs text-gray-600 leading-snug"></p>
+        <div class="border-t my-1.5 border-gray-200/50"></div>
+        <button id="oauth-login-btn" class="w-full text-left px-3 py-2.5 rounded-xl hover:bg-gray-100 active:bg-gray-200 transition-all text-sm font-medium" style="letter-spacing: -0.01em;">Log In</button>
+        <button id="acct-token-btn" class="w-full text-left px-3 py-2.5 rounded-xl hover:bg-gray-100 active:bg-gray-200 transition-all text-sm font-medium" style="letter-spacing: -0.01em;">Provide Bearer token</button>
+        <button id="acct-settings" class="w-full text-left px-3 py-2.5 rounded-xl hover:bg-gray-100 active:bg-gray-200 transition-all text-sm font-medium" style="letter-spacing: -0.01em;">OAuth Settings</button>
+        <button id="acct-logout" class="w-full text-left px-3 py-2.5 rounded-xl hover:bg-gray-100 active:bg-gray-200 transition-all text-sm font-medium hidden" style="letter-spacing: -0.01em;">Log out</button>
         <button id="qs-auth-and-create" type="button" class="hidden"></button>
     </div>
 
     <div id="token-modal" class="fixed inset-0 z-50 hidden">
-      <div class="absolute inset-0 bg-black/40" data-token-close="1"></div>
+      <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" data-token-close="1"></div>
       <div class="absolute inset-0 flex items-center justify-center p-4">
-        <div class="w-[28rem] max-w-full rounded-2xl bg-white shadow-2xl border border-white/40 overflow-hidden">
-          <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <h3 class="text-base font-semibold text-gray-800">Provide Bearer Token</h3>
-            <button class="p-2 rounded hover:bg-gray-100" title="Close" data-token-close="1">
+        <div class="w-[28rem] max-w-full rounded-3xl bg-white shadow-2xl border border-black/5 overflow-hidden">
+          <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50/50">
+            <h3 class="text-lg font-semibold text-gray-900">Provide Bearer Token</h3>
+            <button class="p-2 rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-colors" title="Close" data-token-close="1">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
           </div>
-          <div class="px-4 py-4 space-y-3 text-sm text-gray-700">
+          <div class="px-5 py-4 space-y-3 text-sm text-gray-700">
             <p>Paste a bearer token for the current SPARQL endpoint. This will be stored locally and used for authenticated queries.</p>
             <div>
-              <label for="token-input" class="block text-sm font-medium text-gray-600 mb-1">Bearer token</label>
+              <label for="token-input" class="block text-sm font-medium text-gray-700 mb-1.5">Bearer token</label>
               <div class="relative">
-                <input id="token-input" type="password" class="w-full rounded-lg border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 p-2 pr-10" placeholder="•••••••••••••••••••••••••••••••" autocomplete="off" />
-                <button id="token-visibility-toggle" type="button" class="absolute inset-y-0 right-2 my-auto p-1 rounded hover:bg-gray-200" aria-label="Show token" title="Show token" data-visible="0">
+                <input id="token-input" type="password" class="w-full rounded-lg border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent px-3 py-2.5 pr-10 transition-all" placeholder="•••••••••••••••••••••••••••••••" autocomplete="off" />
+                <button id="token-visibility-toggle" type="button" class="absolute inset-y-0 right-2 my-auto p-1.5 rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-colors" aria-label="Show token" title="Show token" data-visible="0">
                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
                 </button>
               </div>
             </div>
           </div>
-          <div class="px-4 py-3 bg-gray-50 flex items-center justify-end gap-2 border-t border-gray-100">
-            <button id="token-cancel" class="px-3 py-2 rounded bg-white text-gray-800 border hover:bg-gray-100" data-token-close="1">Cancel</button>
-            <button id="token-save" class="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Save & Authenticate</button>
+          <div class="px-5 py-4 bg-gray-50/70 flex items-center justify-end gap-3 border-t border-gray-100">
+            <button id="token-cancel" class="px-4 py-2 rounded-xl bg-white text-gray-800 font-medium border border-gray-200 hover:bg-gray-50 active:bg-gray-100 transition-colors shadow-sm" data-token-close="1">Cancel</button>
+            <button id="token-save" class="px-4 py-2 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 active:bg-blue-800 transition-colors shadow-sm">Save & Authenticate</button>
           </div>
         </div>
       </div>
@@ -519,60 +816,60 @@
 
     <!-- OAuth Settings modal -->
     <div id="solid-settings-modal" class="fixed inset-0 z-40 hidden">
-      <div class="absolute inset-0 bg-black/30" data-close="1"></div>
+      <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" data-close="1"></div>
       <div class="absolute inset-0 flex items-center justify-center p-4">
-        <div class="w-[30rem] max-w-full rounded-2xl bg-white shadow-xl border border-white/40 overflow-hidden">
-          <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <h3 class="text-base font-semibold text-gray-800">OAuth Settings</h3>
-            <button class="p-2 rounded hover:bg-gray-100" data-close="1" title="Close">
+        <div class="w-[30rem] max-w-full rounded-3xl bg-white shadow-2xl border border-black/5 overflow-hidden">
+          <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50/50">
+            <h3 class="text-lg font-semibold text-gray-900">OAuth Settings</h3>
+            <button class="p-2 rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-colors" data-close="1" title="Close">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
           </div>
-          <div class="px-4 py-3 text-sm text-gray-700 space-y-3">
+          <div class="px-5 py-4 text-sm text-gray-700 space-y-3">
             <div>
-              <label class="block text-sm mb-1">OAuth Client ID</label>
-              <input id="oauth-client-id" type="text" placeholder="public-client-id" class="w-full p-2 rounded-md bg-white/80 border border-white/40 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              <p class="text-xs text-gray-500 mt-1">This must match a client registered with the OAuth server for your SPARQL endpoint host.</p>
+              <label class="block text-sm font-medium mb-1.5">OAuth Client ID</label>
+              <input id="oauth-client-id" type="text" placeholder="public-client-id" class="w-full px-3 py-2.5 rounded-lg bg-white border border-gray-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
+              <p class="text-xs text-gray-500 mt-1.5">This must match a client registered with the OAuth server for your SPARQL endpoint host.</p>
             </div>
             <div>
-              <label class="block text-sm mb-1">Redirect URI</label>
-              <input id="oauth-redirect-uri" type="text" placeholder="https://your-host/sparql-visualizer.html" class="w-full p-2 rounded-md bg-white/80 border border-white/40 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              <p class="text-xs text-gray-500 mt-1">Must be an https URL registered for the client. Defaults to the current page URL if served over https.</p>
+              <label class="block text-sm font-medium mb-1.5">Redirect URI</label>
+              <input id="oauth-redirect-uri" type="text" placeholder="https://your-host/sparql-visualizer.html" class="w-full px-3 py-2.5 rounded-lg bg-white border border-gray-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
+              <p class="text-xs text-gray-500 mt-1.5">Must be an https URL registered for the client. Defaults to the current page URL if served over https.</p>
             </div>
           </div>
-          <div class="px-4 py-3 bg-gray-50 flex items-center justify-end gap-2 border-t border-gray-100">
-            <button id="solid-settings-cancel" class="px-3 py-2 rounded bg-white text-gray-800 border hover:bg-gray-100" data-close="1">Cancel</button>
-            <button id="solid-settings-save" class="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Save</button>
+          <div class="px-5 py-4 bg-gray-50/70 flex items-center justify-end gap-3 border-t border-gray-100">
+            <button id="solid-settings-cancel" class="px-4 py-2 rounded-xl bg-white text-gray-800 font-medium border border-gray-200 hover:bg-gray-50 active:bg-gray-100 transition-colors shadow-sm" data-close="1">Cancel</button>
+            <button id="solid-settings-save" class="px-4 py-2 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 active:bg-blue-800 transition-colors shadow-sm">Save</button>
           </div>
         </div>
       </div>
     </div>
 
-    <div id="query-panel" class="fixed top-16 left-2 p-4 z-30 bg-white/60 backdrop-blur-lg rounded-2xl shadow-xl w-[36rem] max-w-[95vw] border border-white/30" style="min-width:36rem; overflow:hidden;">
+    <div id="query-panel" class="fixed top-16 left-2 p-6 z-30 bg-white/85 backdrop-blur-xl rounded-3xl shadow-2xl w-[36rem] max-w-[95vw] border-0" style="min-width:36rem; overflow:hidden; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18), 0 8px 24px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(255, 255, 255, 0.6) inset;">
         <!-- Close (X) button -->
-        <button id="query-panel-close" title="Hide query panel" class="absolute top-2 right-2 p-2 rounded-full bg-white/80 backdrop-blur-sm shadow-md hover:bg-gray-200 transition-colors border border-white/50">
+        <button id="query-panel-close" title="Hide query panel" class="absolute top-3 right-3 p-2 rounded-full bg-white/95 backdrop-blur-sm shadow-md hover:bg-white hover:shadow-lg active:scale-95 transition-all duration-300 border-0" style="box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.06), 0 0 0 0.5px rgba(0, 0, 0, 0.04);">
             <!-- X icon -->
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-700">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-600">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>
             </svg>
         </button>
-        <div class="qp-drag-handle mb-2 px-2 py-1 cursor-move text-[11px] text-gray-500 select-none">Drag to move</div>
+        <div class="qp-drag-handle mb-4 px-2 py-1.5 cursor-move text-[10px] font-semibold text-gray-400 select-none tracking-wider uppercase" style="letter-spacing: 0.05em;">Drag to move</div>
         <div class="flex items-start gap-3">
             <div class="flex-1">
-                <div class="flex items-center justify-between mb-2">
-                    <label class="block text-sm font-semibold text-gray-800">Query Mode</label>
-                    <div id="mode-toggle" class="inline-flex bg-white/70 border border-white/40 rounded-full p-1 shadow-sm">
-                        <button id="mode-basic" class="px-3 py-1 text-sm rounded-full bg-blue-600 text-white">Basic</button>
-                        <button id="mode-advanced" class="px-3 py-1 text-sm rounded-full text-gray-800">Advanced</button>
+                <div class="flex items-center justify-between mb-4">
+                    <label class="block text-sm font-semibold text-gray-900" style="letter-spacing: -0.01em;">Query Mode</label>
+                    <div id="mode-toggle" class="inline-flex bg-white/95 border-0 rounded-full p-1 shadow-sm" style="box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04), 0 0 0 0.5px rgba(0, 0, 0, 0.04) inset;">
+                        <button id="mode-basic" class="px-4 py-1.5 text-sm font-medium rounded-full bg-blue-600 text-white shadow-sm transition-all">Basic</button>
+                        <button id="mode-advanced" class="px-4 py-1.5 text-sm font-medium rounded-full text-gray-700 hover:bg-gray-100 transition-all">Advanced</button>
                     </div>
                 </div>
 
                 <!-- SPARQL Endpoint selector -->
                 <div class="mb-3">
-                    <label for="sparql-endpoint" class="block text-sm font-medium text-gray-700 mb-1">SPARQL Endpoint</label>
+                    <label for="sparql-endpoint" class="block text-sm font-medium text-gray-700 mb-1.5">SPARQL Endpoint</label>
                     <input id="sparql-endpoint" list="endpoint-list" type="text" placeholder="https://example.org/sparql" value="https://demo.openlinksw.com/sparql"
-                    class="w-full p-2 rounded-md bg-white/80 border border-white/40 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    class="w-full px-3 py-2.5 rounded-lg bg-white/95 border border-gray-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
                     <datalist id="endpoint-list">
                         <option value="https://demo.openlinksw.com/sparql"></option>
                         <option value="https://query.wikidata.org/sparql"></option>
@@ -583,49 +880,49 @@
 
                 <!-- Basic Mode: WHERE-clause only -->
                 <div id="basic-panel">
-                    <label for="basic-where-input" class="block text-sm font-medium text-gray-700 mb-1">SPARQL Body (Triple Patterns)</label>
-                    <div id="basic-editor" class="rounded-xl bg-white/80 border border-white/40 shadow-inner h-28"></div>
-                    <div class="mt-2 flex items-center gap-3">
-                        <label class="text-sm text-gray-700">LIMIT
-                            <input id="basic-limit" type="number" min="1" max="10000" value="200" class="ml-2 w-24 p-1 rounded-md bg-white/80 border border-white/40 shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <label for="basic-where-input" class="block text-sm font-medium text-gray-700 mb-1.5">SPARQL Body (Triple Patterns)</label>
+                    <div id="basic-editor" class="rounded-xl bg-white/95 border border-gray-200 shadow-sm h-28"></div>
+                    <div class="mt-2.5 flex items-center gap-3">
+                        <label class="text-sm font-medium text-gray-700">LIMIT
+                            <input id="basic-limit" type="number" min="1" max="10000" value="200" class="ml-2 w-24 px-2 py-1.5 rounded-lg bg-white/95 border border-gray-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
                         </label>
                     </div>
                 </div>
 
                 <!-- Advanced Mode: full CONSTRUCT query -->
                 <div id="advanced-panel" class="hidden">
-                    <label for="adv-construct-input" class="block text-sm font-medium text-gray-700 mb-1">Full CONSTRUCT query</label>
-                    <div id="adv-editor" class="rounded-xl bg-white/80 border border-white/40 shadow-inner w-full h-36"></div>
+                    <label for="adv-construct-input" class="block text-sm font-medium text-gray-700 mb-1.5">Full CONSTRUCT query</label>
+                    <div id="adv-editor" class="rounded-xl bg-white/95 border border-gray-200 shadow-sm w-full h-36"></div>
                 </div>
-                <div class="mt-2 flex items-center justify-between">
-                    <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                <div class="mt-3 flex items-center justify-between">
+                    <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
                         <input id="panel-friendly-labels" type="checkbox" class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4" checked>
                         <span>Use IRI Labels</span>
                         <button id="panel-friendly-labels-gear" type="button" title="Label priority settings"
-                            class="p-1 rounded hover:bg-gray-200">
+                            class="p-1 rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0-2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
                                 <circle cx="12" cy="12" r="3"></circle>
                             </svg>
                         </button>
                     </label>
-                    <div class="flex items-center gap-2">
-                        <button id="run-query" class="px-4 py-2 text-sm rounded-full bg-blue-600 text-white shadow-sm hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50">Run Query</button>
-                        <button id="fit-graph" class="px-4 py-2 text-sm rounded-full bg-white/80 text-gray-900 shadow-sm hover:bg-white active:bg-gray-100 border border-white/40">Fit</button>
-                        <button id="clear-graph" class="px-4 py-2 text-sm rounded-full bg-white/80 text-gray-900 shadow-sm hover:bg-white active:bg-gray-100 border border-white/40">Clear</button>
+                    <div class="flex items-center gap-2.5">
+                        <button id="run-query" class="px-6 py-2.5 text-sm font-semibold rounded-full bg-blue-600 text-white shadow-md hover:bg-blue-700 hover:shadow-lg active:bg-blue-800 active:scale-96 disabled:opacity-50 transition-all duration-300 border-0" style="box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3), 0 2px 6px rgba(0, 122, 255, 0.2); letter-spacing: -0.01em;">Run Query</button>
+                        <button id="fit-graph" class="px-4 py-2 text-sm font-medium rounded-full bg-white/95 text-gray-700 shadow-sm hover:bg-white hover:shadow-md active:bg-gray-50 active:scale-96 border-0 transition-all duration-300" style="box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04), 0 0 0 0.5px rgba(0, 0, 0, 0.04); letter-spacing: -0.01em;">Fit</button>
+                        <button id="clear-graph" class="px-4 py-2 text-sm font-medium rounded-full bg-white/95 text-gray-700 shadow-sm hover:bg-white hover:shadow-md active:bg-gray-50 active:scale-96 border-0 transition-all duration-300" style="box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04), 0 0 0 0.5px rgba(0, 0, 0, 0.04); letter-spacing: -0.01em;">Clear</button>
                     </div>
                 </div>
                 <p class="mt-2 text-xs text-gray-600">Runs against https://demo.openlinksw.com/sparql. Use CONSTRUCT for graph results. Literals appear as small nodes.</p>
             </div>
         </div>
         <!-- Resize handle -->
-        <div id="query-resizer" class="absolute bottom-2 right-2 w-4 h-4 bg-white/80 border border-white/50 rounded shadow cursor-nwse-resize"></div>
+        <div id="query-resizer" class="absolute bottom-2 right-2 w-4 h-4 bg-white/90 border border-gray-200 rounded-md shadow-sm cursor-nwse-resize"></div>
     </div>
 
     <!-- Top-left launcher to re-open the query panel when hidden -->
-    <button id="query-panel-launcher" title="Show query panel" class="fixed top-4 left-4 p-2 rounded-full bg-white/70 backdrop-blur-sm shadow-md hover:bg-gray-200 transition-colors z-30 hidden">
+    <button id="query-panel-launcher" title="Show query panel" class="fixed top-4 left-4 p-3 rounded-full bg-white/80 backdrop-blur-xl shadow-lg hover:bg-white hover:shadow-xl active:scale-95 transition-all duration-300 z-30 border-0 hidden" style="box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.08), 0 0 0 0.5px rgba(255, 255, 255, 0.5) inset;">
         <!-- Panel icon (similar style to right-side icons) -->
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-700">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-600">
             <rect x="3" y="4" width="18" height="16" rx="3" ry="3"></rect>
             <line x1="3" y1="9" x2="21" y2="9"></line>
         </svg>
@@ -633,16 +930,16 @@
 
     <div id="graph-container" class="graph-container">
         <div id="empty-state" class="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div class="bg-white/70 backdrop-blur-md border border-white/40 rounded-2xl px-4 py-3 shadow">
-                <p class="text-sm text-gray-700">Enter a query above and press <span class="font-semibold">Run</span> to visualize results.</p>
+            <div class="bg-white/88 backdrop-blur-xl border-0 rounded-3xl px-8 py-5 shadow-2xl" style="box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12), 0 4px 16px rgba(0, 0, 0, 0.08), 0 0 0 0.5px rgba(255, 255, 255, 0.6) inset;">
+                <p class="text-sm font-medium text-gray-700" style="letter-spacing: -0.01em;">Enter a query above and press <span class="font-semibold text-blue-600">Run</span> to visualize results.</p>
             </div>
         </div>
     </div>
     <div id="tooltip"></div>
 
     <!-- Watermark -->
-    <div id="watermark" class="fixed bottom-2 right-2 select-none pointer-events-none z-10 text-gray-500/80 text-[11px] leading-tight text-right">
-        <div>SPARQLWorks™ 0.6.24</div>
+    <div id="watermark" class="fixed bottom-3 right-3 select-none pointer-events-none z-10 text-gray-400/80 text-[11px] font-medium leading-tight text-right" style="letter-spacing: -0.005em;">
+        <div>SPARQLWorks™ 0.6.26</div>
         <div>OpenLink Software © 2025</div>
     </div>
 
@@ -852,7 +1149,38 @@
         // Property filter state (select-to-include):
         // When selectedProperties is empty => show all properties.
         let selectedProperties = new Set();
+        // Initialize edge annotation mode from localStorage or default to icons
         let edgeAnnotationMode = (localStorage.getItem('edgeAnnot') === 'names') ? 'names' : 'icons';
+
+        // Set initial radio button state
+        const edgeAnnotIcons = document.getElementById('edge-annot-icons');
+        const edgeAnnotNames = document.getElementById('edge-annot-names');
+        if (edgeAnnotIcons) edgeAnnotIcons.checked = edgeAnnotationMode === 'icons';
+        if (edgeAnnotNames) edgeAnnotNames.checked = edgeAnnotationMode === 'names';
+
+        // Add event listeners for edge annotation radio buttons
+        if (edgeAnnotIcons) {
+            edgeAnnotIcons.addEventListener('change', () => {
+                if (edgeAnnotIcons.checked) {
+                    edgeAnnotationMode = 'icons';
+                    localStorage.setItem('edgeAnnot', 'icons');
+                    if (edgeAnnotNames) edgeAnnotNames.checked = false;
+                    updateGraph(); // Re-render graph to show/hide elements
+                    try { syncUrlToUi(); } catch(_) {}
+                }
+            });
+        }
+        if (edgeAnnotNames) {
+            edgeAnnotNames.addEventListener('change', () => {
+                if (edgeAnnotNames.checked) {
+                    edgeAnnotationMode = 'names';
+                    localStorage.setItem('edgeAnnot', 'names');
+                    if (edgeAnnotIcons) edgeAnnotIcons.checked = false;
+                    updateGraph(); // Re-render graph to show/hide elements
+                    try { syncUrlToUi(); } catch(_) {}
+                }
+            });
+        }
 
         // Visual constants
         function getNodeRadius(d){
@@ -1069,9 +1397,11 @@ function normalizePredicate(pred) {
                 .attr('fill', d => color(d.group))
                 .call(drag(simulation))
                 .on('dblclick', (event, d) => { d.fx = null; d.fy = null; })
+                .on('click', (event, d) => { if (d.isIri) { event.stopPropagation(); const iri = makeEntityUrl(d.id); window.open(iri, '_blank'); } })
                 .on('mouseover', function (event, d) {
                     if (d.group === 'role') tooltip.style('visibility', 'visible').html(`<strong>${d.name}</strong><br/><strong>Desc:</strong> ${d.description}<br/><strong>Resp:</strong> ${d.responsibilities}`);
                     else if (d.group === 'literal') tooltip.style('visibility', 'visible').html(`<strong>Literal:</strong> ${d.name}`);
+                    else if (d.isIri) tooltip.style('visibility', 'visible').html(`Open: <strong>${makeEntityUrl(d.id)}</strong>`);
                     d3.select(this).attr('r', dd => getNodeRadius(dd) * 1.5);
                 })
                 .on('mousemove', event => tooltip.style('top', (event.pageY - 10) + 'px').style('left', (event.pageX + 10) + 'px'))
@@ -1194,6 +1524,18 @@ function normalizePredicate(pred) {
                 } catch(_) {}
             }
 
+            // Set initial positions in a circle to start nodes near edges
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const radius = Math.min(width, height) / 4;
+            currentGraphData.nodes.forEach((node, i) => {
+                if (!node.x) {  // Only set if not already set (e.g., from pinned positions)
+                    const angle = (i / currentGraphData.nodes.length) * 2 * Math.PI;
+                    node.x = centerX + radius * Math.cos(angle);
+                    node.y = centerY + radius * Math.sin(angle);
+                }
+            });
+
             simulation.nodes(currentGraphData.nodes);
             simulation.force('link').links(currentGraphData.links);
             simulation.alpha(0.9).restart();
@@ -1220,7 +1562,7 @@ function normalizePredicate(pred) {
                     const dist = Math.hypot(dx, dy) || 1;
                     const ux = dx / dist;
                     const r = getNodeRadius(d.target);
-                    const inset = Math.max(r - ARROW_TARGET_INSET, 0);
+                    const inset = Math.max(r - 2, 0);
                     return d.target.x - ux * inset;
                 })
                 .attr('y2', d => {
@@ -1228,7 +1570,7 @@ function normalizePredicate(pred) {
                     const dist = Math.hypot(dx, dy) || 1;
                     const uy = dy / dist;
                     const r = getNodeRadius(d.target);
-                    const inset = Math.max(r - ARROW_TARGET_INSET, 0);
+                    const inset = Math.max(r - 2, 0);
                     return d.target.y - uy * inset;
                 });
             node.attr('cx', d => d.x)
@@ -1525,16 +1867,12 @@ function normalizePredicate(pred) {
                     if (epInput) {
                         epInput.addEventListener('change', () => {
                             try {
-                                // Only auto-update if current describeBase matches old derived base or is empty
-                                const current = describeBase;
                                 const derived = deriveDescribeBaseFromEndpoint(epInput.value);
-                                if (!current || current === deriveDescribeBaseFromEndpoint(epInput.defaultValue || '')) {
-                                    describeBase = derived;
-                                    describeInput.value = describeBase;
-                                    try { localStorage.setItem('describeBase', describeBase); } catch(_) {}
-                                    try { window.describeBase = describeBase; } catch(_) {}
-                                    try { updateUrlFormatParamsOnly(); } catch(_) {}
-                                }
+                                describeBase = derived;
+                                describeInput.value = describeBase;
+                                try { localStorage.setItem('describeBase', describeBase); } catch(_) {}
+                                try { window.describeBase = describeBase; } catch(_) {}
+                                try { updateUrlFormatParamsOnly(); } catch(_) {}
                             } catch(_) {}
                         });
                     }
@@ -2138,7 +2476,7 @@ function normalizePredicate(pred) {
         async function runSparqlConstruct() {
             const btn = document.getElementById('run-query');
             const merge = false; // merging disabled; each run replaces the graph
-            const endpoint = (document.getElementById('sparql-endpoint')?.value?.trim()) || localStorage.getItem('sparqlEndpoint') || 'https://demo.openlinksw.com/sparql';
+            const endpoint = (document.getElementById('sparql-endpoint')?.value?.trim()) || localStorage.getItem('sparqlEndpoint') || 'https://dbpedia.org/sparql';
             const mode = getSelectedMode();
             try { if (typeof window.setQueryMode === 'function') window.setQueryMode(mode); } catch(_){ }
             let query = '';
@@ -3013,12 +3351,21 @@ function normalizePredicate(pred) {
         // Keep URL service param in sync when endpoint changes
         const epInput = document.getElementById('sparql-endpoint');
         if (epInput) epInput.addEventListener('input', () => { try { syncUrlToUi(); } catch(_) {} });
-        // Toast helpers
+        // Premium Toast helpers
         function showToast(message, variant = 'info', timeout = 1600) {
             const t = document.getElementById('toast');
             const ti = document.getElementById('toast-inner');
             ti.textContent = message;
-            ti.className = 'px-3 py-2 rounded-lg shadow bg-gray-800 text-white text-sm ' + (variant === 'success' ? 'bg-green-600 text-white' : variant === 'error' ? 'bg-red-600 text-white' : 'bg-gray-800 text-white');
+            // Premium toast styling with semantic colors
+            const baseStyle = 'px-4 py-3 rounded-2xl shadow-2xl text-white text-sm font-semibold border-0; letter-spacing: -0.01em;';
+            const variantStyles = {
+                success: 'background: rgba(52, 199, 89, 0.96);',
+                error: 'background: rgba(255, 59, 48, 0.96);',
+                warning: 'background: rgba(255, 149, 0, 0.96);',
+                info: 'background: rgba(0, 0, 0, 0.96);'
+            };
+            const shadowStyle = 'box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24), 0 4px 12px rgba(0, 0, 0, 0.18), 0 0 0 0.5px rgba(255, 255, 255, 0.1) inset;';
+            ti.setAttribute('style', `${baseStyle} ${variantStyles[variant] || variantStyles.info} ${shadowStyle}`);
             t.classList.remove('hidden');
             clearTimeout(showToast._to);
             showToast._to = setTimeout(() => t.classList.add('hidden'), timeout);
@@ -3954,7 +4301,7 @@ function normalizePredicate(pred) {
                 link.attr('opacity', 1).attr('display', null);
                 node.attr('opacity', 1).attr('display', null);
                 nodeLabelGroup.attr('opacity', 1).attr('display', null);
-                predicateIconGroup.attr('opacity', 1).attr('display', null);
+                predicateIconGroup.attr('opacity', 1).attr('display', edgeAnnotationMode === 'icons' ? null : 'none');
             } catch(_) {}
         }
         function applyNodeHoverFocus(n) {
@@ -3968,6 +4315,10 @@ function normalizePredicate(pred) {
             nodeLabelGroup.attr('opacity', d => connected.has(d.id) ? 1 : NODE_FADE_OPACITY);
             link.attr('opacity', d => (d.source.id === n.id || d.target.id === n.id) ? 1 : LINK_FADE_OPACITY);
             predicateIconGroup.attr('opacity', d => (d.source.id === n.id || d.target.id === n.id) ? 1 : LINK_FADE_OPACITY);
+            // Ensure icons stay hidden when predicate names mode is selected
+            if (edgeAnnotationMode === 'names') {
+                predicateIconGroup.attr('display', 'none');
+            }
         }
         function applyLinkHoverFocus(l) {
             // show only the hovered link and its two nodes; hide all others
