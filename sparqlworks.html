@@ -868,7 +868,7 @@
                 <!-- SPARQL Endpoint selector -->
                 <div class="mb-3">
                     <label for="sparql-endpoint" class="block text-sm font-medium text-gray-700 mb-1.5">SPARQL Endpoint</label>
-                    <input id="sparql-endpoint" list="endpoint-list" type="text" placeholder="https://example.org/sparql" value="https://demo.openlinksw.com/sparql"
+                    <input id="sparql-endpoint" list="endpoint-list" type="text" placeholder="https://dbpedia.org/sparql"
                     class="w-full px-3 py-2.5 rounded-lg bg-white/95 border border-gray-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
                     <datalist id="endpoint-list">
                         <option value="https://demo.openlinksw.com/sparql"></option>
@@ -1266,8 +1266,17 @@ function normalizePredicate(pred) {
             } catch(_) {}
             try {
                 const ep = document.getElementById('sparql-endpoint')?.value || '';
-                return deriveDescribeBaseFromEndpoint(ep);
-            } catch(_) { return ''; }
+                if (ep) return deriveDescribeBaseFromEndpoint(ep);
+                // Default to current location origin + /describe/?uri=
+                const origin = window.location.origin;
+                if (origin && origin !== 'null' && !origin.startsWith('file://')) {
+                    return origin + '/describe/?uri=';
+                } else {
+                    // For file:// URLs, use DBpedia's describe endpoint
+                    return 'https://dbpedia.org/describe/?uri=';
+                }
+            } catch(_) {}
+            return '';
         })();
         // Mirror onto window for code paths that read from window.describeBase
         try { window.describeBase = describeBase; } catch(_) {}
@@ -3580,6 +3589,27 @@ function normalizePredicate(pred) {
             setMode('basic');
             try {
                 const shouldRun = applyUrlParams(setMode);
+                // Initialize endpoint from current location if not set by URL params or localStorage
+                try {
+                    const epInput = document.getElementById('sparql-endpoint');
+                    if (epInput && !epInput.value) {
+                        const stored = localStorage.getItem('sparqlEndpoint');
+                        if (stored) {
+                            epInput.value = stored;
+                        } else {
+                            // Default to current location origin + /sparql for http/https URLs
+                            try {
+                                const origin = window.location.origin;
+                                if (origin && origin !== 'null' && !origin.startsWith('file://')) {
+                                    epInput.value = origin + '/sparql';
+                                } else {
+                                    // Use DBpedia as default for file:// URLs
+                                    epInput.value = 'https://dbpedia.org/sparql';
+                                }
+                            } catch(_) {}
+                        }
+                    }
+                } catch(_) {}
                 // If a URL query was loaded into Advanced, do not immediately mirror Basic over it
                 if (!window.__loadedFromUrlQ) {
                     try { window.__settingAdvProgrammatically = true; } catch(_) {}
@@ -4168,10 +4198,34 @@ function normalizePredicate(pred) {
                 } else {
                     // Set default queries only if no URL query is pending
                     if (!basicAce.getValue()) {
-                        basicAce.setValue(`?movie dbo:creator ?creator;\n\trdfs:label ?movieName.\nFILTER(?creator = dbr:Spike_Lee).`, -1);
+                        // Use movie/creator query for file:// URLs, simple query for web URLs
+                        const isFileUrl = window.location.protocol === 'file:';
+                        if (isFileUrl) {
+                            basicAce.setValue(`?movie dbo:creator ?creator;\n\trdfs:label ?movieName.\nFILTER(?creator = dbr:Spike_Lee).`, -1);
+                        } else {
+                            basicAce.setValue(`PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns>
+
+?s ?p ?o .`, -1);
+                        }
                     }
                     if (!advAce.getValue()) {
-                        advAce.setValue(`CONSTRUCT\n{\n  ?movie dbo:creator ?creator;\n\trdfs:label ?movieName.\n}\nWHERE\n{\n  ?movie <http://dbpedia.org/ontology/creator> ?creator.\n\t  FILTER(?creator = dbr:Spike_Lee).\n}\nLIMIT 200`, -1);
+                        // Use expanded movie/creator query for file:// URLs, simple query for web URLs
+                        const isFileUrl = window.location.protocol === 'file:';
+                        if (isFileUrl) {
+                            advAce.setValue(`CONSTRUCT\n{\n  ?movie dbo:creator ?creator;\n\trdfs:label ?movieName.\n}\nWHERE\n{\n  ?movie <http://dbpedia.org/ontology/creator> ?creator.\n\t  FILTER(?creator = dbr:Spike_Lee).\n}\nLIMIT 200`, -1);
+                        } else {
+                            advAce.setValue(`PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns>
+
+CONSTRUCT
+{
+  ?s ?p ?o .
+}
+WHERE
+{
+?s ?p ?o .
+}
+LIMIT 200`, -1);
+                        }
                     }
                 }
             } catch(_) {}
