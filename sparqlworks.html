@@ -1307,6 +1307,23 @@ function normalizePredicate(pred) {
         // Mirror onto window for code paths that read from window.describeBase
         try { window.describeBase = describeBase; } catch(_) {}
 
+        // Initialize SPARQL endpoint with protocol-sensitive default value
+        (function(){
+            try {
+                const epInput = document.getElementById('sparql-endpoint');
+                if (epInput && !epInput.value) {
+                    const origin = window.location.origin;
+                    if (origin && origin !== 'null' && !origin.startsWith('file://')) {
+                        // For hosted applications, derive endpoint from current origin
+                        epInput.value = origin + '/sparql';
+                    } else {
+                        // For file:// access, use DBpedia as default
+                        epInput.value = 'https://dbpedia.org/sparql';
+                    }
+                }
+            } catch(_) {}
+        })();
+
         function deriveDescribeBaseFromEndpoint(endpointUrl) {
             try {
                 if (!endpointUrl) return '';
