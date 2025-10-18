@@ -3,7 +3,6 @@
 <!--
     Copyright (c) 2025 OpenLink Software, Daniel Heward-Mills
     Licensed under the Apache License, Version 2.0
-    See LICENSE file in the project root for details.
 
     NOTICE
 
@@ -53,8 +52,8 @@
     }
     </script>
 
-    <script src="https://d3js.org/d3.v7.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="./js/d3.v7.min.js"></script>
+    <link rel="stylesheet" href="./css/main.css">
     <style>
         :root {
             /* Premium Color Palette - iOS/macOS Inspired */
@@ -565,9 +564,13 @@
         }
     </style>
     <!-- Lightweight embedded code editor (Ace) -->
-    <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.32.9/src-min-noconflict/ace.js"></script>
-    <script>try{ ace.config.set('basePath','https://cdn.jsdelivr.net/npm/ace-builds@1.32.9/src-min-noconflict'); }catch(_){}</script>
-    <!-- OAuth: handled inline below -->
+    <script src="./js/ace.js"></script>
+    <script>
+    ace.config.set('basePath', './js');
+    const editor = ace.edit("editor");
+    editor.setTheme("ace/theme/chrome");
+    editor.session.setMode("ace/mode/sparql");
+    </script>    <!-- OAuth: handled inline below -->
 </head>
 
 <body class="bg-gray-50">
@@ -939,7 +942,7 @@
 
     <!-- Watermark -->
     <div id="watermark" class="fixed bottom-3 right-3 select-none pointer-events-none z-10 text-gray-400/80 text-[11px] font-medium leading-tight text-right" style="letter-spacing: -0.005em;">
-        <div>SPARQLWorks™ 0.6.26</div>
+        <div>SPARQLWorks™ 0.7.0</div>
         <div>OpenLink Software © 2025</div>
     </div>
 
@@ -1149,8 +1152,8 @@
         // Property filter state (select-to-include):
         // When selectedProperties is empty => show all properties.
         let selectedProperties = new Set();
-        // Initialize edge annotation mode from localStorage or default to icons
-        let edgeAnnotationMode = (localStorage.getItem('edgeAnnot') === 'names') ? 'names' : 'icons';
+        // Initialize edge annotation mode from localStorage or default to names (predicate names)
+        let edgeAnnotationMode = (localStorage.getItem('edgeAnnot') === 'names') ? 'names' : 'names';
 
         // Set initial radio button state
         const edgeAnnotIcons = document.getElementById('edge-annot-icons');
