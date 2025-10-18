@@ -939,6 +939,7 @@
         </div>
     </div>
     <div id="tooltip"></div>
+    <div id="node-menu" class="hidden" style="position:absolute; z-index:50; background: rgba(255,255,255,0.98); backdrop-filter: blur(16px); border: 0.5px solid rgba(0,0,0,0.06); border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,0.12); padding: 6px; min-width: 220px; white-space: nowrap;"></div>
 
     <!-- Watermark -->
     <div id="watermark" class="fixed bottom-3 right-3 select-none pointer-events-none z-10 text-gray-400/80 text-[11px] font-medium leading-tight text-right" style="letter-spacing: -0.005em;">
@@ -1035,6 +1036,24 @@
         const width = container.clientWidth;
         const height = container.clientHeight;
         const tooltip = d3.select("#tooltip");
+        const nodeMenu = d3.select("#node-menu");
+        function openNodeMenu(x, y, d) {
+            const actionLabel = (window.urlFormat === 'virtuoso') ? 'Go To Description Page' : 'Open Link';
+            const items = [{ key: 'open', label: actionLabel, action: () => { const iri = makeEntityUrl(d.id); window.open(iri, '_blank'); } }];
+            nodeMenu.html(items.map(it => `<button data-key="${it.key}" style="display:block; width:100%; text-align:left; padding:8px 10px; border:0; background:transparent; font-size:13px; cursor:pointer; border-radius:8px; white-space: nowrap;">${it.label}</button>`).join(''));
+            nodeMenu.style('left', x + 'px').style('top', y + 'px').classed('hidden', false).style('display','block');
+            nodeMenu.selectAll('button')
+                .on('click', (event) => {
+                    const key = event.currentTarget.getAttribute('data-key');
+                    if (key === 'open') items[0].action();
+                    closeNodeMenu();
+                    event.stopPropagation();
+                })
+                .on('mouseover', function(){ d3.select(this).style('background','#f3f4f6'); })
+                .on('mouseout', function(){ d3.select(this).style('background','transparent'); });
+        }
+        function closeNodeMenu(){ nodeMenu.classed('hidden', true).style('display','none'); }
+        document.addEventListener('click', () => closeNodeMenu());
         const color = d3.scaleOrdinal(d3.schemeCategory10)
             .domain(['scheme', 'class', 'category', 'role', 'external', 'literal']); // Explicit domain for consistent colors
 
@@ -1136,6 +1155,8 @@
             .force("charge", d3.forceManyBody())
             .force("collision", d3.forceCollide().radius(d => getNodeRadius(d) + 12).iterations(3))
             .force("center", d3.forceCenter(width / 2, height / 2))
+            .force("x", d3.forceX(width / 2).strength(0.005))
+            .force("y", d3.forceY(height / 2).strength(0.005))
             .alphaDecay(0.02)
             .velocityDecay(0.3)
             .on("tick", ticked);
@@ -1193,6 +1214,8 @@
 
         // Arrow inset so marker sits closer to target node edge
         const ARROW_TARGET_INSET = 3;
+        const CLAMP_PADDING = 48;
+        const BOUNCE_DAMPING = 0.9;
 
 function predicateTerm(pred) {
     try {
@@ -1409,17 +1432,10 @@ function normalizePredicate(pred) {
                 .attr('fill', d => color(d.group))
                 .call(drag(simulation))
                 .on('dblclick', (event, d) => { d.fx = null; d.fy = null; })
-                .on('click', (event, d) => { if (d.isIri) { event.stopPropagation(); const iri = makeEntityUrl(d.id); window.open(iri, '_blank'); } })
-                .on('mouseover', function (event, d) {
-                    if (d.group === 'role') tooltip.style('visibility', 'visible').html(`<strong>${d.name}</strong><br/><strong>Desc:</strong> ${d.description}<br/><strong>Resp:</strong> ${d.responsibilities}`);
-                    else if (d.group === 'literal') tooltip.style('visibility', 'visible').html(`<strong>Literal:</strong> ${d.name}`);
-                    else if (d.isIri) tooltip.style('visibility', 'visible').html(`Open: <strong>${makeEntityUrl(d.id)}</strong>`);
-                    d3.select(this).attr('r', dd => getNodeRadius(dd) * 1.5);
-                })
-                .on('mousemove', event => tooltip.style('top', (event.pageY - 10) + 'px').style('left', (event.pageX + 10) + 'px'))
-                .on('mouseout', function (event, d) {
-                    tooltip.style('visibility', 'hidden');
-                    d3.select(this).attr('r', dd => getNodeRadius(dd));
+                .on('click', (event, d) => {
+                    event.stopPropagation();
+                    closeNodeMenu();
+                    if (d.isIri) openNodeMenu(event.pageX, event.pageY, d);
                 })
                 .on('mouseenter', function(event, d){
                     if (!hoverFocusEnabled) return;
@@ -1556,7 +1572,6 @@ function normalizePredicate(pred) {
         }
 
         function ticked() {
-            // Arrowhead is at TARGET end: source side shortened, target goes to node center so marker sits at edge end
             link.attr('x1', d => {
                     const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y;
                     const dist = Math.hypot(dx, dy) || 1;
@@ -1627,6 +1642,8 @@ function normalizePredicate(pred) {
             const centerX = newWidth / 2;
             const centerY = newHeight / 2; // exact middle of the container
             simulation.force("center", d3.forceCenter(centerX, centerY));
+            simulation.force("x", d3.forceX(centerX).strength(0.005));
+            simulation.force("y", d3.forceY(centerY).strength(0.005));
             simulation.alpha(0.3).restart();
         }
 
