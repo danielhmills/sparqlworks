@@ -2522,7 +2522,16 @@ function normalizePredicate(pred) {
         async function runSparqlConstruct() {
             const btn = document.getElementById('run-query');
             const merge = false; // merging disabled; each run replaces the graph
-            const endpoint = (document.getElementById('sparql-endpoint')?.value?.trim()) || localStorage.getItem('sparqlEndpoint') || 'https://dbpedia.org/sparql';
+            let endpoint = (document.getElementById('sparql-endpoint')?.value?.trim()) || localStorage.getItem('sparqlEndpoint');
+            if (!endpoint) {
+                // Use application origin for hosted apps, DBpedia for file:// access
+                const origin = window.location.origin;
+                if (origin && origin !== 'null' && !origin.startsWith('file://')) {
+                    endpoint = origin + '/sparql';
+                } else {
+                    endpoint = 'https://dbpedia.org/sparql';
+                }
+            }
             const mode = getSelectedMode();
             try { if (typeof window.setQueryMode === 'function') window.setQueryMode(mode); } catch(_){ }
             let query = '';
@@ -2596,7 +2605,16 @@ function normalizePredicate(pred) {
         // Run an explicit SPARQL query string, bypassing editor content
         async function runSparqlWithQuery(explicitQuery, urlModeOverride) {
             const btn = document.getElementById('run-query');
-            const endpoint = (document.getElementById('sparql-endpoint')?.value?.trim()) || localStorage.getItem('sparqlEndpoint') || 'https://demo.openlinksw.com/sparql';
+            let endpoint = (document.getElementById('sparql-endpoint')?.value?.trim()) || localStorage.getItem('sparqlEndpoint');
+            if (!endpoint) {
+                // Use application origin for hosted apps, demo.openlinksw.com for file:// access
+                const origin = window.location.origin;
+                if (origin && origin !== 'null' && !origin.startsWith('file://')) {
+                    endpoint = origin + '/sparql';
+                } else {
+                    endpoint = 'https://demo.openlinksw.com/sparql';
+                }
+            }
             const mode = urlModeOverride || getSelectedMode();
             const query = explicitQuery;
             // Treat explicit runs as custom queries
