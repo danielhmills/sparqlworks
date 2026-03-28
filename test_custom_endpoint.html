@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Custom Endpoint Handling</title>
+    <script>
+        // Simulate the endpoint resolution and describe base derivation
+        function testCustomEndpointScenario() {
+            const scenarios = [
+                {
+                    name: "Custom endpoint in input field",
+                    inputValue: "https://custom.example.com/sparql",
+                    localStorageValue: "https://dbpedia.org/sparql",
+                    origin: "https://example.com",
+                    expectedEndpoint: "https://custom.example.com/sparql",
+                    expectedDescribeBase: "https://custom.example.com/describe/?uri=",
+                    description: "Input field takes priority over localStorage"
+                },
+                {
+                    name: "Custom endpoint in localStorage",
+                    inputValue: "",
+                    localStorageValue: "https://custom.example.com/sparql",
+                    origin: "https://example.com",
+                    expectedEndpoint: "https://custom.example.com/sparql",
+                    expectedDescribeBase: "https://custom.example.com/describe/?uri=",
+                    description: "localStorage used when input is empty"
+                },
+                {
+                    name: "Custom endpoint with port",
+                    inputValue: "https://localhost:8890/sparql",
+                    localStorageValue: "",
+                    origin: "https://example.com",
+                    expectedEndpoint: "https://localhost:8890/sparql",
+                    expectedDescribeBase: "https://localhost:8890/describe/?uri=",
+                    description: "Port numbers are preserved in describe base"
+                },
+                {
+                    name: "Custom endpoint with path",
+                    inputValue: "https://custom.example.com/my-virtuoso/sparql",
+                    localStorageValue: "",
+                    origin: "https://example.com",
+                    expectedEndpoint: "https://custom.example.com/my-virtuoso/sparql",
+                    expectedDescribeBase: "https://custom.example.com/describe/?uri=",
+                    description: "Path is ignored, only origin is used for describe base"
+                }
+            ];
+            
+            const results = document.getElementById('results');
+            results.innerHTML = '';
+            
+            scenarios.forEach(scenario => {
+                // Simulate the endpoint resolution logic
+                let endpoint = scenario.inputValue || scenario.localStorageValue;
+                if (!endpoint) {
+                    if (scenario.origin && scenario.origin !== 'null' && !scenario.origin.startsWith('file://')) {
+                        endpoint = scenario.origin + '/sparql';
+                    } else {
+                        endpoint = 'https://dbpedia.org/sparql';
+                    }
+                }
+                
+                // Simulate deriveDescribeBaseFromEndpoint
+                let describeBase = '';
+                try {
+                    if (endpoint) {
+                        const url = new URL(endpoint, 'http://localhost');
+                        const origin = url.origin;
+                        describeBase = origin.replace(/\/+$/, '') + '/describe/?uri=';
+                    }
+                } catch(_) {
+                    describeBase = '';
+                }
+                
+                const endpointPassed = endpoint === scenario.expectedEndpoint;
+                const describePassed = describeBase === scenario.expectedDescribeBase;
+                const overallPassed = endpointPassed && describePassed;
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${scenario.name}</td>
+                    <td>${scenario.description}</td>
+                    <td><strong>Input:</strong> ${scenario.inputValue}<br><strong>Storage:</strong> ${scenario.localStorageValue}</td>
+                    <td>${endpoint}</td>
+                    <td>${scenario.expectedEndpoint}</td>
+                    <td>${describeBase}</td>
+                    <td>${scenario.expectedDescribeBase}</td>
+                    <td>${overallPassed ? '✅ PASS' : '❌ FAIL'}</td>
+                `;
+                row.style.backgroundColor = overallPassed ? '#d4edda' : '#f8d7da';
+                results.appendChild(row);
+            });
+        }
+    </script>
+</head>
+<body>
+    <h1>Test Custom Endpoint Handling</h1>
+    <p>This test demonstrates how custom SPARQL endpoints are handled and how describe bases are derived from them.</p>
+    
+    <button onclick="testCustomEndpointScenario()">Run Custom Endpoint Tests</button>
+    
+    <table border="1" style="margin-top: 20px; width: 100%;">
+        <thead>
+            <tr>
+                <th>Scenario</th>
+                <th>Description</th>
+                <th>Inputs</th>
+                <th>Actual Endpoint</th>
+                <th>Expected Endpoint</th>
+                <th>Actual Describe Base</th>
+                <th>Expected Describe Base</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody id="results"></tbody>
+    </table>
+    
+    <div style="margin-top: 30px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+        <h3>Key Behaviors:</h3>
+        <ul style="line-height: 1.8;">
+            <li><strong>Priority:</strong> Input field &gt; localStorage &gt; application origin &gt; hardcoded fallback</li>
+            <li><strong>Describe Base:</strong> Always derived from the endpoint's origin (protocol + hostname + port)</li>
+            <li><strong>Path Handling:</strong> Endpoint paths are preserved, but describe base uses only the origin</li>
+            <li><strong>Dynamic Updates:</strong> When endpoint changes, describe base is automatically updated</li>
+            <li><strong>Persistence:</strong> Custom endpoints and describe bases are saved to localStorage</li>
+        </ul>
+    </div>
+    
+    <script>
+        // Run tests automatically when page loads
+        window.onload = testCustomEndpointScenario;
+    </script>
+</body>
+</html>
