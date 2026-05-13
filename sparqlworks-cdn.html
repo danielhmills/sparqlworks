@@ -238,18 +238,20 @@
         #tooltip {
             position: absolute;
             visibility: hidden;
-            background: rgba(28, 28, 30, 0.96);
-            backdrop-filter: blur(var(--blur-lg)) saturate(180%);
-            color: var(--color-text-inverted);
-            padding: var(--space-3) var(--space-4);
-            border-radius: var(--radius-lg);
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(16px) saturate(180%);
+            -webkit-backdrop-filter: blur(16px) saturate(180%);
+            color: var(--color-text-primary);
+            padding: 8px 12px;
+            border-radius: 12px;
             font-size: 12px;
             font-weight: 500;
             max-width: 350px;
             overflow-wrap: break-word;
             pointer-events: none;
             z-index: 20;
-            box-shadow: var(--shadow-xl), 0 0 0 0.5px rgba(255, 255, 255, 0.1) inset;
+            border: 0.5px solid rgba(0, 0, 0, 0.06);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.08);
             transition: opacity var(--transition-base);
             letter-spacing: -0.01em;
         }
@@ -1032,6 +1034,8 @@
         const width = container.clientWidth;
         const height = container.clientHeight;
         const tooltip = d3.select("#tooltip");
+        let tooltipAnchored = false;
+        let tooltipHideTimeout;
         const color = d3.scaleOrdinal(d3.schemeCategory10)
             .domain(['scheme', 'class', 'category', 'role', 'external', 'literal']); // Explicit domain for consistent colors
 
@@ -1406,7 +1410,7 @@ function normalizePredicate(pred) {
                 .attr('fill', d => color(d.group))
                 .call(drag(simulation))
                 .on('dblclick', (event, d) => { d.fx = null; d.fy = null; })
-                .on('click', (event, d) => { if (d.isIri) { event.stopPropagation(); const iri = makeEntityUrl(d.id); window.open(iri, '_blank'); } })
+                .on('click', (event, d) => { if (d.isIri) { event.stopPropagation(); clearTimeout(tooltipHideTimeout); closeNodeMenu(); openNodeMenu(event.pageX, event.pageY, d); if (tooltip.style('visibility') === 'visible') { const menuNode = nodeMenu.node(); const menuRect = menuNode.getBoundingClientRect(); tooltip.transition().duration(200).style('left', menuRect.left + 'px').style('top', (menuRect.top - tooltip.node().offsetHeight - 4) + 'px'); tooltipAnchored = true; } } })
                 .on('mouseover', function (event, d) {
                     if (d.group === 'role') tooltip.style('visibility', 'visible').html(`<strong>${d.name}</strong><br/><strong>Desc:</strong> ${d.description}<br/><strong>Resp:</strong> ${d.responsibilities}`);
                     else if (d.group === 'literal') tooltip.style('visibility', 'visible').html(`<strong>Literal:</strong> ${d.name}`);
@@ -1460,13 +1464,29 @@ function normalizePredicate(pred) {
             const nodeLabelEnter = nodeLabelGroup.enter().append('g')
                 .attr('class', 'node-label-group')
                 .attr('display', d => d.isIri ? null : null)
-                .on('click', (event, d) => { if (d.isIri) { event.stopPropagation(); const iri = makeEntityUrl(d.id); window.open(iri, '_blank'); } })
-                .on('mouseover', (event, d) => {
-                    const iri = d.isIri ? makeEntityUrl(d.id) : '';
-                    tooltip.style('visibility', 'visible').html(d.isIri ? `Open: <strong>${iri}</strong>` : `Literal value`);
+                .on('click', (event, d) => { if (d.isIri) { event.stopPropagation(); clearTimeout(tooltipHideTimeout); closeNodeMenu(); openNodeMenu(event.pageX, event.pageY, d); if (tooltip.style('visibility') === 'visible') { const menuNode = nodeMenu.node(); const menuRect = menuNode.getBoundingClientRect(); tooltip.transition().duration(200).style('left', menuRect.left + 'px').style('top', (menuRect.top - tooltip.node().offsetHeight - 4) + 'px'); tooltipAnchored = true; } } })
+                .on('mouseenter', function(event, d){
+                    if (!hoverFocusEnabled) return;
+                    const el = d3.select(this);
+                    clearTimeout(el.property('hoverTO'));
+                    const to = setTimeout(()=> applyNodeHoverFocus(d), 500);
+                    el.property('hoverTO', to);
                 })
-                .on('mousemove', event => tooltip.style('top', (event.pageY - 10) + 'px').style('left', (event.pageX + 10) + 'px'))
-                .on('mouseout', () => tooltip.style('visibility', 'hidden'));
+                .on('mouseleave', function(event, d){
+                    const el = d3.select(this);
+                    clearTimeout(el.property('hoverTO'));
+                    resetHighlight();
+                })
+                .on('mouseover', (event, d) => {
+                    if (d.isIri) {
+                        const iri = makeEntityUrl(d.id);
+                        tooltip.style('visibility', 'visible').html(`<div style="font-weight:600;margin-bottom:4px;">${d.name}</div><div style="font-size:11px;color:#6e6e73;word-break:break-all;max-width:320px;">${iri}</div>`);
+                    } else {
+                        tooltip.style('visibility', 'visible').html(`Literal value`);
+                    }
+                })
+                .on('mousemove', event => { if (tooltipAnchored) return; tooltip.style('top', (event.pageY - 10) + 'px').style('left', (event.pageX + 10) + 'px'); })
+                .on('mouseout', () => { tooltipHideTimeout = setTimeout(() => tooltip.style('visibility', 'hidden'), 200); });
             
             nodeLabelEnter.append('text');
 
@@ -1504,6 +1524,18 @@ function normalizePredicate(pred) {
             const predicateLabelEnter = predicateLabelGroup.enter().append('g')
                 .attr('class', 'predicate-label-group')
                 .on('click', (event, d) => { event.stopPropagation(); const iri = makeEntityUrl(d.predicate); window.open(iri, '_blank'); })
+                .on('mouseenter', function(event, d){
+                    if (!hoverFocusEnabled) return;
+                    const el = d3.select(this);
+                    clearTimeout(el.property('hoverTO'));
+                    const to = setTimeout(()=> applyLinkHoverFocus(d), 500);
+                    el.property('hoverTO', to);
+                })
+                .on('mouseleave', function(event, d){
+                    const el = d3.select(this);
+                    clearTimeout(el.property('hoverTO'));
+                    resetHighlight();
+                })
                 .on('mouseover', (event, d) => {
                     const iri = makeEntityUrl(d.predicate);
                     tooltip.style('visibility', 'visible').html(`Relationship: <strong>${predicateTerm(d.predicate)}</strong><br/>IRI: ${iri}`);
