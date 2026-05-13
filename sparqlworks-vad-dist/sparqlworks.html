@@ -1041,23 +1041,395 @@
         const nodeMenu = d3.select("#node-menu");
         let tooltipAnchored = false;
         let tooltipHideTimeout;
+        async function expandNode(iri, opts = {}) {
+            const { endpoint: overrideEndpoint, predicates, fedService } = opts;
+            let endpoint = overrideEndpoint || (document.getElementById('sparql-endpoint')?.value?.trim()) || localStorage.getItem('sparqlEndpoint');
+            if (!endpoint) {
+                const origin = window.location.origin;
+                if (origin && origin !== 'null' && !origin.startsWith('file://')) {
+                    endpoint = origin + '/sparql';
+                } else {
+                    endpoint = 'https://dbpedia.org/sparql';
+                }
+            }
+            const fullIri = expandIri(iri);
+            let query;
+            if (predicates && predicates.length) {
+                const predList = predicates.map(p => `<${expandIri(p)}>`).join(' ');
+                if (fedService) {
+                    query = `CONSTRUCT { <${fullIri}> ?p ?o } WHERE { SERVICE <${fedService}> { <${fullIri}> ?p ?o . FILTER(?p IN (${predList})) } }`;
+                } else {
+                    query = `CONSTRUCT { <${fullIri}> ?p ?o } WHERE { <${fullIri}> ?p ?o . FILTER(?p IN (${predList})) }`;
+                }
+            } else if (fedService) {
+                query = `CONSTRUCT { <${fullIri}> ?p ?o } WHERE { SERVICE <${fedService}> { <${fullIri}> ?p ?o } }`;
+            } else {
+                query = `CONSTRUCT { <${fullIri}> ?p ?o } WHERE { <${fullIri}> ?p ?o }`;
+            }
+            try {
+                const params = new URLSearchParams();
+                params.set('query', query);
+                params.set('format', 'application/ld+json');
+                const hdrs = {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                        'Accept': 'application/ld+json, application/json;q=0.9, */*;q=0.1'
+                    },
+                    body: params.toString()
+                };
+                const tok = getAccessToken();
+                if (tok) hdrs.headers['Authorization'] = `Bearer ${tok}`;
+                const res = await fetch(endpoint, hdrs);
+                if (!res.ok) {
+                    showToast(`Expand query failed (HTTP ${res.status})`, 'error', 2600);
+                    return;
+                }
+                const json = await res.json();
+                const graph = jsonldToGraph(json);
+                if (graph.nodes && graph.nodes.length > 0) {
+                    applyGraphData(graph, true);
+                    const expandedId = expandIri(iri);
+                    let expandedNode = null;
+                    for (const n of originalGraphData.nodes) {
+                        if (expandIri(n.id) === expandedId) expandedNode = n;
+                        if (typeof n.x === 'number') { n.fx = n.x; n.fy = n.y; }
+                    }
+                    if (expandedNode && typeof expandedNode.x === 'number') {
+                        const cx = expandedNode.x, cy = expandedNode.y;
+                        let newIdx = 0;
+                        for (const n of originalGraphData.nodes) {
+                            if (typeof n.x !== 'number') {
+                                const angle = (newIdx / Math.max(graph.nodes.length, 1)) * 2 * Math.PI;
+                                const dist = 120 + Math.random() * 60;
+                                n.x = cx + dist * Math.cos(angle);
+                                n.y = cy + dist * Math.sin(angle);
+                                newIdx++;
+                            }
+                        }
+                    }
+                    window.__isExpand = true;
+                    refreshFiltersAndLegend();
+                    updateGraph();
+                    setTimeout(() => {
+                        for (const n of originalGraphData.nodes) { n.fx = null; n.fy = null; }
+                        window.__isExpand = false;
+                    }, 2500);
+                    try {
+                        const up = new URLSearchParams(window.location.search);
+                        let val = iri;
+                        if (overrideEndpoint) val += ';ep=' + encodeURIComponent(overrideEndpoint);
+                        if (predicates && predicates.length) val += ';preds=' + encodeURIComponent(predicates.join(','));
+                        if (fedService) val += ';fed=' + encodeURIComponent(fedService);
+                        const existing = up.getAll('expand');
+                        const filtered = existing.filter(e => e.split(';')[0] !== iri);
+                        up.delete('expand');
+                        for (const e of filtered) up.append('expand', e);
+                        up.append('expand', val);
+                        window.history.replaceState({}, '', window.location.pathname + '?' + up.toString());
+                    } catch(_) {}
+                    showToast(`Added ${graph.nodes.length} node(s) and ${graph.links.length} link(s)`, 'success');
+                } else {
+                    showToast('No additional data found for this node.', 'info', 2600);
+                }
+            } catch(e) {
+                showToast(`Expand failed: ${e.message || e}`, 'error', 3000);
+            }
+        }
+
+        // Advanced expand modal
+        function ensureExpandModal(iri) {
+            const modalId = 'expand-advanced-modal';
+            let modal = document.getElementById(modalId);
+            if (modal) {
+                modal.remove();
+            }
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = `
+            <div id="${modalId}" class="fixed inset-0 z-50 hidden">
+              <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" data-close="1"></div>
+              <div id="expand-modal-wrapper" class="absolute inset-0 flex items-center justify-center p-4">
+                <div id="expand-modal-card" class="w-[38rem] max-w-full rounded-2xl bg-white shadow-2xl border-0 flex flex-col overflow-hidden" style="max-height:85vh;">
+                  <div id="expand-modal-drag" class="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0 cursor-move select-none">
+                    <h3 class="text-base font-semibold text-gray-900">Advanced Expand</h3>
+                    <button id="expand-modal-close" class="p-2 rounded-full hover:bg-gray-100"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+                  </div>
+                  <div class="px-5 py-4 space-y-4 shrink-0">
+                    <div>
+                      <label class="block text-sm font-semibold text-gray-800 mb-1">SPARQL Endpoint</label>
+                      <div class="expand-dropdown-wrapper" style="position:relative;">
+                        <input id="expand-endpoint" type="text" autocomplete="off" class="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <div class="expand-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:60;background:rgba(255,255,255,0.98);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:0.5px solid rgba(0,0,0,0.06);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,0.12);padding:4px;max-height:200px;overflow-y:auto;"></div>
+                      </div>
+                    </div>
+                    <div>
+                      <label class="block text-sm font-semibold text-gray-800 mb-1">Federated Service (optional)</label>
+                      <div class="expand-dropdown-wrapper" style="position:relative;">
+                        <input id="expand-fed-service" type="text" autocomplete="off" placeholder="e.g. https://dbpedia.org/sparql" class="w-full px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <div class="expand-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:60;background:rgba(255,255,255,0.98);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:0.5px solid rgba(0,0,0,0.06);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,0.12);padding:4px;max-height:200px;overflow-y:auto;"></div>
+                      </div>
+                      <p class="text-xs text-gray-400 mt-1">If set, a SERVICE clause is added to the WHERE block.</p>
+                    </div>
+                  </div>
+                  <div class="px-5 py-2 flex flex-col flex-1 min-h-0" style="overflow:hidden;">
+                    <div class="flex items-center justify-between mb-2 shrink-0 gap-2">
+                      <label class="text-sm font-semibold text-gray-800">Predicates</label>
+                      <div class="flex items-center gap-1">
+                        <button id="expand-fetch-preds" class="px-3 py-1.5 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-700">Select Predicates</button>
+                        <button id="expand-pred-deselect-all-btn" class="px-2 py-1.5 text-xs rounded-lg border hover:bg-gray-100 hidden">Deselect all</button>
+                      </div>
+                    </div>
+                    <input id="expand-pred-search" type="text" placeholder="Search predicates..." class="w-full px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2 shrink-0 hidden" />
+                    <div id="expand-pred-list" class="border border-gray-200 rounded-lg p-2 space-y-1" style="min-height:60px;max-height:300px;overflow-y:scroll;">
+                      <p class="text-xs text-gray-400">Click "Select Predicates" to fetch available predicates for this node.</p>
+                    </div>
+                  </div>
+                  <div class="px-5 py-4 bg-gray-50 flex items-center justify-end gap-2 border-t border-gray-100 rounded-b-2xl shrink-0">
+                    <button id="expand-modal-cancel" class="px-4 py-2 rounded-lg bg-white text-gray-800 border hover:bg-gray-100 text-sm">Cancel</button>
+                    <button id="expand-modal-run" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm font-semibold"><span id="expand-run-label">Run Expand</span><span id="expand-run-spinner" style="display:none;margin-left:6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite;"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="8"/></svg></span></button>
+                  </div>
+                </div>
+              </div>
+            </div>`;
+            document.body.appendChild(wrapper.firstElementChild);
+            modal = document.getElementById(modalId);
+            modal._expandIri = iri;
+
+            const close = () => modal.classList.add('hidden');
+
+            modal.querySelector('[data-close="1"]').addEventListener('click', close);
+            document.getElementById('expand-modal-wrapper').addEventListener('click', (e) => {
+                if (e.target === e.currentTarget) close();
+            });
+            document.getElementById('expand-modal-close').addEventListener('click', close);
+            document.getElementById('expand-modal-cancel').addEventListener('click', close);
+
+            // Make modal draggable by its header
+            const modalCard = document.getElementById('expand-modal-card');
+            const dragHandle = document.getElementById('expand-modal-drag');
+            let dragPos = { x: 0, y: 0, px: 0, py: 0 };
+            dragHandle.addEventListener('mousedown', (e) => {
+                dragPos.px = e.clientX; dragPos.py = e.clientY;
+                const s = getComputedStyle(modalCard);
+                dragPos.x = parseInt(s.marginLeft) || 0;
+                dragPos.y = parseInt(s.marginTop) || 0;
+                document.addEventListener('mousemove', onDrag);
+                document.addEventListener('mouseup', stopDrag);
+            });
+            function onDrag(e) {
+                modalCard.style.marginLeft = (dragPos.x + e.clientX - dragPos.px) + 'px';
+                modalCard.style.marginTop = (dragPos.y + e.clientY - dragPos.py) + 'px';
+            }
+            function stopDrag() {
+                document.removeEventListener('mousemove', onDrag);
+                document.removeEventListener('mouseup', stopDrag);
+            }
+
+            if (!document.getElementById('expand-spin-keyframes')) {
+                const style = document.createElement('style');
+                style.id = 'expand-spin-keyframes';
+                style.textContent = '@keyframes spin { to { transform:rotate(360deg); } }';
+                document.head.appendChild(style);
+            }
+
+            function setExpandLoading(loading) {
+                document.getElementById('expand-run-label').style.display = loading ? 'none' : 'inline';
+                document.getElementById('expand-run-spinner').style.display = loading ? 'inline' : 'none';
+                document.getElementById('expand-modal-run').disabled = loading;
+            }
+
+            const predSearch = document.getElementById('expand-pred-search');
+            const deselectAllBtn = document.getElementById('expand-pred-deselect-all-btn');
+
+            predSearch.addEventListener('input', () => {
+                const q = predSearch.value.toLowerCase();
+                document.querySelectorAll('#expand-pred-list label').forEach(l => {
+                    l.style.display = l.textContent.toLowerCase().includes(q) ? '' : 'none';
+                });
+            });
+
+            deselectAllBtn.addEventListener('click', () => {
+                document.querySelectorAll('.expand-pred-check').forEach(cb => cb.checked = false);
+            });
+
+            // Custom dropdowns for endpoint and federated service
+            const presetEndpoints = [
+                'https://dbpedia.org/sparql',
+                'https://demo.openlinksw.com/sparql',
+                'https://wikidata.demo.openlinksw.com/sparql',
+                'https://linkeddata.uriburner.com/sparql'
+            ];
+            function setupDropdown(input, dropdown) {
+                function render(filter) {
+                    const q = (filter || '').toLowerCase();
+                    const matches = presetEndpoints.filter(e => e.toLowerCase().includes(q));
+                    if (matches.length === 0) { dropdown.style.display = 'none'; return; }
+                    dropdown.innerHTML = matches.map(e =>
+                        `<button class="expand-drop-item" data-val="${e}" style="display:block;width:100%;text-align:left;padding:8px 10px;border:0;background:transparent;font-size:13px;cursor:pointer;border-radius:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${e}</button>`
+                    ).join('');
+                    dropdown.style.display = 'block';
+                    dropdown.querySelectorAll('.expand-drop-item').forEach(btn => {
+                        btn.addEventListener('mousedown', (ev) => { ev.preventDefault(); input.value = btn.dataset.val; dropdown.style.display = 'none'; input.focus(); });
+                        btn.addEventListener('mouseover', () => btn.style.background = '#f3f4f6');
+                        btn.addEventListener('mouseout', () => btn.style.background = 'transparent');
+                    });
+                }
+                input.addEventListener('focus', () => render(input.value));
+                input.addEventListener('input', () => render(input.value));
+                input.addEventListener('blur', () => { setTimeout(() => dropdown.style.display = 'none', 150); });
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape') { dropdown.style.display = 'none'; input.blur(); }
+                    if (e.key === 'ArrowDown') { e.preventDefault(); const first = dropdown.querySelector('.expand-drop-item'); if (first) { first.style.background = '#f3f4f6'; first.focus(); } }
+                });
+            }
+            setupDropdown(document.getElementById('expand-endpoint'), document.getElementById('expand-endpoint').nextElementSibling);
+            setupDropdown(document.getElementById('expand-fed-service'), document.getElementById('expand-fed-service').nextElementSibling);
+
+            document.getElementById('expand-modal-close').addEventListener('click', close);
+            document.getElementById('expand-modal-cancel').addEventListener('click', close);
+
+            document.getElementById('expand-fetch-preds').addEventListener('click', async () => {
+                const ep = document.getElementById('expand-endpoint').value.trim();
+                if (!ep) { showToast('Enter a SPARQL endpoint first', 'info', 2000); return; }
+                const btn = document.getElementById('expand-fetch-preds');
+                const list = document.getElementById('expand-pred-list');
+                btn.disabled = true; btn.textContent = 'Fetching...';
+                list.innerHTML = '<p class="text-xs text-gray-400">Loading predicates...</p>';
+                predSearch.classList.add('hidden'); predSearch.value = '';
+                deselectAllBtn.classList.add('hidden');
+                const fullIri = expandIri(modal._expandIri);
+                const fedSvc = document.getElementById('expand-fed-service').value.trim();
+                const q = fedSvc
+                    ? `SELECT DISTINCT ?p (SAMPLE(?label) AS ?label) WHERE { SERVICE <${fedSvc}> { <${fullIri}> ?p ?o . OPTIONAL { ?p rdfs:label ?label } } } GROUP BY ?p`
+                    : `SELECT DISTINCT ?p (SAMPLE(?label) AS ?label) WHERE { <${fullIri}> ?p ?o . OPTIONAL { ?p rdfs:label ?label } } GROUP BY ?p`;
+                try {
+                    const r = await fetch(ep, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                            'Accept': 'application/sparql-results+json, application/json;q=0.9, */*;q=0.1'
+                        },
+                        body: new URLSearchParams({ query: q, format: 'application/sparql-results+json' }).toString()
+                    });
+                    if (!r.ok) { showToast(`Query failed (HTTP ${r.status})`, 'error', 2000); return; }
+                    const data = await r.json();
+                    const bindings = data?.results?.bindings || [];
+                    if (bindings.length === 0) {
+                        list.innerHTML = '<p class="text-xs text-gray-400">No predicates found.</p>';
+                    } else {
+                        predSearch.classList.remove('hidden');
+                        deselectAllBtn.classList.remove('hidden');
+                        list.innerHTML = bindings.map(b => {
+                            const p = b.p?.value || '';
+                            const label = b.label?.value || '';
+                            const compact = compactIri(p);
+                            const display = label || (compact !== p ? compact : p);
+                            return `<label class="flex items-center gap-2 text-sm hover:bg-gray-50 rounded px-1 py-0.5 cursor-pointer">
+                                <input type="checkbox" class="expand-pred-check rounded" value="${p.replace(/"/g, '&quot;')}">
+                                <span title="${p}">${display}</span>
+                            </label>`;
+                        }).join('') + `<div class="flex gap-2 mt-2 pt-2 border-t border-gray-100">
+                            <button id="expand-pred-select-all" class="text-xs px-2 py-1 rounded border hover:bg-gray-100">Select all</button>
+                            <button id="expand-pred-deselect-all" class="text-xs px-2 py-1 rounded border hover:bg-gray-100">Deselect all</button>
+                        </div>`;
+                        document.getElementById('expand-pred-select-all').addEventListener('click', () => {
+                            list.querySelectorAll('.expand-pred-check').forEach(cb => cb.checked = true);
+                        });
+                        document.getElementById('expand-pred-deselect-all').addEventListener('click', () => {
+                            list.querySelectorAll('.expand-pred-check').forEach(cb => cb.checked = false);
+                        });
+                    }
+                } catch(e) {
+                    showToast(`Failed to fetch predicates: ${e.message}`, 'error', 3000);
+                } finally {
+                    btn.disabled = false; btn.textContent = 'Select Predicates';
+                }
+            });
+
+            document.getElementById('expand-modal-run').addEventListener('click', () => {
+                const ep = document.getElementById('expand-endpoint').value.trim();
+                const fedSvc = document.getElementById('expand-fed-service').value.trim();
+                const checked = Array.from(document.querySelectorAll('.expand-pred-check:checked')).map(cb => cb.value);
+                try {
+                    const up = new URLSearchParams(window.location.search);
+                    if (ep) up.set('expand-last-ep', ep); else up.delete('expand-last-ep');
+                    if (fedSvc) up.set('expand-last-fed', fedSvc); else up.delete('expand-last-fed');
+                    window.history.replaceState({}, '', window.location.pathname + '?' + up.toString());
+                } catch(_) {}
+                setExpandLoading(true);
+                close();
+                expandNode(modal._expandIri, {
+                    endpoint: ep || null,
+                    predicates: checked.length ? checked : null,
+                    fedService: fedSvc || null
+                }).finally(() => {
+                    setExpandLoading(false);
+                });
+            });
+
+            return modal;
+        }
+
         function openNodeMenu(x, y, d) {
             const actionLabel = (window.urlFormat === 'virtuoso') ? 'Go To Description Page' : 'Open Link';
             const iri = makeEntityUrl(d.id);
-            const items = [{ key: 'open', label: actionLabel, action: () => { window.open(iri, '_blank'); } }];
-            nodeMenu.html(items.map(it => `<button data-key="${it.key}" title="${iri}" style="display:block; width:100%; text-align:left; padding:8px 10px; border:0; background:transparent; font-size:13px; cursor:pointer; border-radius:8px; white-space: nowrap;">${it.label}</button>`).join(''));
+            const html = `
+                <button data-key="open" title="${iri}" style="display:block;width:100%;text-align:left;padding:8px 10px;border:0;background:transparent;font-size:13px;cursor:pointer;border-radius:8px;white-space:nowrap;">${actionLabel}</button>
+                <div class="expand-dropright" style="position:relative;">
+                    <button data-key="expand" title="Run expand query" style="display:block;width:100%;text-align:left;padding:8px 10px;border:0;background:transparent;font-size:13px;cursor:pointer;border-radius:8px;white-space:nowrap;">Expand ▸</button>
+                    <div class="expand-submenu" style="display:none;position:absolute;left:100%;top:0;background:rgba(255,255,255,0.98);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:0.5px solid rgba(0,0,0,0.06);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,0.12);padding:4px;min-width:120px;white-space:nowrap;z-index:51;">
+                        <button data-key="expand-default" title="Run default DESCRIBE expansion" style="display:block;width:100%;text-align:left;padding:8px 10px;border:0;background:transparent;font-size:13px;cursor:pointer;border-radius:8px;">Default</button>
+                        <button data-key="expand-advanced" title="Advanced expansion options" style="display:block;width:100%;text-align:left;padding:8px 10px;border:0;background:transparent;font-size:13px;cursor:pointer;border-radius:8px;">Advanced</button>
+                    </div>
+                </div>`;
+            nodeMenu.html(html);
             nodeMenu.style('left', x + 'px').style('top', y + 'px').classed('hidden', false).style('display','block');
             nodeMenu.on('mouseenter', () => { clearTimeout(tooltipHideTimeout); tooltip.style('visibility', 'visible'); });
             nodeMenu.on('mouseleave', () => { tooltip.style('visibility', 'hidden'); });
-            nodeMenu.selectAll('button')
-                .on('click', (event) => {
-                    const key = event.currentTarget.getAttribute('data-key');
-                    if (key === 'open') items[0].action();
+
+            nodeMenu.select('.expand-dropright').on('mouseenter', function() {
+                d3.select(this).select('.expand-submenu').style('display', 'block');
+                d3.select(this).select('button').style('background', '#f3f4f6');
+            }).on('mouseleave', function() {
+                d3.select(this).select('.expand-submenu').style('display', 'none');
+                d3.select(this).select('button').style('background', 'transparent');
+            });
+
+            nodeMenu.selectAll('button').on('mouseover', function() {
+                if (!this.closest('.expand-submenu')) d3.select(this).style('background', '#f3f4f6');
+            }).on('mouseout', function() {
+                if (!this.closest('.expand-submenu')) d3.select(this).style('background', 'transparent');
+            });
+
+            nodeMenu.select('.expand-submenu').selectAll('button')
+                .on('mouseover', function(){ d3.select(this).style('background', '#f3f4f6'); })
+                .on('mouseout', function(){ d3.select(this).style('background', 'transparent'); });
+
+            nodeMenu.selectAll('button').on('click', (event) => {
+                const key = event.currentTarget.getAttribute('data-key');
+                event.stopPropagation();
+                if (key === 'open') {
+                    window.open(iri, '_blank');
                     closeNodeMenu();
-                    event.stopPropagation();
-                })
-                .on('mouseover', function(){ d3.select(this).style('background','#f3f4f6'); })
-                .on('mouseout', function(){ d3.select(this).style('background','transparent'); });
+                } else if (key === 'expand-default') {
+                    closeNodeMenu();
+                    expandNode(d.id);
+                } else if (key === 'expand-advanced') {
+                    closeNodeMenu();
+                    const modal = ensureExpandModal(d.id);
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const defaultEp = (document.getElementById('sparql-endpoint')?.value?.trim()) || localStorage.getItem('sparqlEndpoint') || '';
+                    document.getElementById('expand-endpoint').value = urlParams.get('expand-last-ep') || defaultEp;
+                    document.getElementById('expand-fed-service').value = urlParams.get('expand-last-fed') || '';
+                    document.getElementById('expand-pred-list').innerHTML = '<p class="text-xs text-gray-400">Click "Select Predicates" to fetch available predicates for this node.</p>';
+                    document.getElementById('expand-pred-search').classList.add('hidden');
+                    document.getElementById('expand-pred-search').value = '';
+                    document.getElementById('expand-pred-deselect-all-btn').classList.add('hidden');
+                    const mc = document.getElementById('expand-modal-card');
+                    if (mc) { mc.style.marginLeft = ''; mc.style.marginTop = ''; }
+                    modal.classList.remove('hidden');
+                }
+            });
         }
         function closeNodeMenu(){ nodeMenu.classed('hidden', true).style('display','none'); tooltipAnchored = false; }
         document.addEventListener('click', () => closeNodeMenu());
@@ -1487,13 +1859,37 @@ function normalizePredicate(pred) {
                 .merge(node);
 
             // === LINKS ===
+            // Deduplicate mutual links: if A→B and B→A share the same predicate, keep only one with double arrows
+            {
+                const links = currentGraphData.links;
+                for (let i = 0; i < links.length; i++) {
+                    const a = links[i];
+                    const aS = (typeof a.source === 'object' && a.source) ? (a.source.id || a.source) : a.source;
+                    const aT = (typeof a.target === 'object' && a.target) ? (a.target.id || a.target) : a.target;
+                    for (let j = i + 1; j < links.length; j++) {
+                        const b = links[j];
+                        const bS = (typeof b.source === 'object' && b.source) ? (b.source.id || b.source) : b.source;
+                        const bT = (typeof b.target === 'object' && b.target) ? (b.target.id || b.target) : b.target;
+                        if (aS === bT && aT === bS && a.predicate === b.predicate) {
+                            const keep = aS < aT ? a : b;
+                            const drop = aS < aT ? b : a;
+                            keep._mutual = true;
+                            drop._suppress = true;
+                        }
+                    }
+                }
+                const filtered = links.filter(l => !l._suppress);
+                if (filtered.length !== links.length) {
+                    currentGraphData.links = filtered;
+                }
+            }
             link = link.data(currentGraphData.links, d => `${d.source.id}-${d.target.id}-${d.predicate}`);
             link.exit().remove();
             link = link.enter().append('line')
                 .attr('class', 'link-path')
                 // Arrow points toward OBJECT (target). Default: marker-end. If symmetric, add start arrow too.
                 .attr('marker-end', 'url(#arrowhead)')
-                .attr('marker-start', d => isSymmetricPredicate(d.predicate) ? 'url(#arrowhead-start)' : null)
+                .attr('marker-start', d => isSymmetricPredicate(d) ? 'url(#arrowhead-start)' : null)
                 .on('mouseenter', function(event, d){
                     if (!hoverFocusEnabled) return;
                     const el = d3.select(this);
@@ -1629,10 +2025,16 @@ function normalizePredicate(pred) {
 
             simulation.nodes(currentGraphData.nodes);
             simulation.force('link').links(currentGraphData.links);
-            simulation.alpha(1.0);
-            for (let i = 0; i < 80; i++) simulation.tick();
-            ticked();
-            simulation.alpha(0.5).restart();
+            if (window.__isExpand) {
+                // Expand: gentle animation, existing nodes pinned
+                ticked();
+                simulation.alpha(0.3).restart();
+            } else {
+                simulation.alpha(1.0);
+                for (let i = 0; i < 80; i++) simulation.tick();
+                ticked();
+                simulation.alpha(0.5).restart();
+            }
 
             setEmptyStateVisible(currentGraphData.nodes.length === 0);
         }
@@ -2630,6 +3032,16 @@ function normalizePredicate(pred) {
                 if (empty) {
                     showToast('No results for this query. Try broadening the WHERE clause or increasing LIMIT.', 'info', 2600);
                 }
+                // Auto-expand nodes from URL param
+                if (!empty && window.__urlExpandNodes && window.__urlExpandNodes.length) {
+                    const toExpand = window.__urlExpandNodes;
+                    window.__urlExpandNodes = null;
+                    for (const item of toExpand) {
+                        const iri = typeof item === 'string' ? item : item.iri;
+                        const opts = typeof item === 'object' ? item.opts : {};
+                        try { await expandNode(iri, opts); } catch(_) {}
+                    }
+                }
             } catch (e) {
                 if (!document.getElementById('error-modal')?.classList.contains('hidden')) {
                     // already shown via non-OK response handling
@@ -2689,6 +3101,16 @@ function normalizePredicate(pred) {
                 } else {
                     showToast('Query complete', 'success');
                 }
+                // Auto-expand nodes from URL param
+                if (!empty && window.__urlExpandNodes && window.__urlExpandNodes.length) {
+                    const toExpand = window.__urlExpandNodes;
+                    window.__urlExpandNodes = null;
+                    for (const item of toExpand) {
+                        const iri = typeof item === 'string' ? item : item.iri;
+                        const opts = typeof item === 'object' ? item.opts : {};
+                        try { await expandNode(iri, opts); } catch(_) {}
+                    }
+                }
             } catch (err) {
                 if (!document.getElementById('error-modal')?.classList.contains('hidden')) {
                     // already shown via non-OK response handling
@@ -2728,12 +3150,20 @@ function normalizePredicate(pred) {
                 try { refreshFiltersAndLegend(); } catch(_) {}
                 return;
             }
-            const byId = new Map(originalGraphData.nodes.map(n => [n.id, n]));
-            for (const n of newGraph.nodes) if (!byId.has(n.id)) byId.set(n.id, n);
+            const byId = new Map();
+            for (const n of originalGraphData.nodes) byId.set(expandIri(n.id), n);
+            for (const n of newGraph.nodes) {
+                const key = expandIri(n.id);
+                if (!byId.has(key)) byId.set(key, n);
+            }
             originalGraphData.nodes = Array.from(byId.values());
 
-            const linkKey = l => `${l.source.id}-${l.target.id}-${l.predicate}`;
-            const existing = new Set(originalGraphData.links.map(l => linkKey({ source: l.source.id || l.source, target: l.target.id || l.target, predicate: l.predicate })));
+            const linkKey = l => {
+                const s = (typeof l.source === 'object' && l.source) ? (l.source.id || l.source) : l.source;
+                const t = (typeof l.target === 'object' && l.target) ? (l.target.id || l.target) : l.target;
+                return `${expandIri(s)}-${expandIri(t)}-${l.predicate}`;
+            };
+            const existing = new Set(originalGraphData.links.map(l => linkKey(l)));
             for (const l of newGraph.links) {
                 const k = linkKey(l);
                 if (!existing.has(k)) originalGraphData.links.push(l);
@@ -3377,6 +3807,24 @@ function normalizePredicate(pred) {
                     window.__urlDesiredPositions = map;
                 } catch(_) {}
             }
+            // expand nodes from URL
+            try {
+                const expandVals = params.getAll('expand');
+                if (expandVals.length) {
+                    window.__urlExpandNodes = expandVals.map(raw => {
+                        const parts = raw.split(';');
+                        const iri = parts[0];
+                        const opts = {};
+                        for (let i = 1; i < parts.length; i++) {
+                            const [k, v] = parts[i].split('=');
+                            if (k === 'ep') opts.endpoint = decodeURIComponent(v);
+                            if (k === 'preds') opts.predicates = decodeURIComponent(v).split(',');
+                            if (k === 'fed') opts.fedService = decodeURIComponent(v);
+                        }
+                        return { iri, opts };
+                    });
+                }
+            } catch(_) {}
             const q = incomingQ;
             if (q) {
                 const chosenMode = urlMode || detectModeForQuery(q);
@@ -4227,21 +4675,16 @@ function normalizePredicate(pred) {
         })();
 
         // Detect symmetric predicates that should render double-headed arrows
-        function isSymmetricPredicate(p) {
-            const S = new Set([
-                'owl:sameAs',
-                'owl:equivalentClass',
-                'owl:equivalentProperty',
-                'owl:disjointWith'
-            ]);
-            return S.has(p);
+        // Double arrows for mutual links (reverse relationship exists in the graph data)
+        function isSymmetricPredicate(d) {
+            return !!d._mutual;
         }
 
         // Update link rendering to include double-headed arrows for symmetric predicates
         link = link.data(currentGraphData.links, d => `${d.source.id}-${d.target.id}-${d.predicate}`)
             .join("line")
             .attr("marker-end", "url(#arrowhead)")
-            .attr("marker-start", d => isSymmetricPredicate(d.predicate) ? "url(#arrowhead-start)" : null);
+            .attr("marker-start", d => isSymmetricPredicate(d) ? "url(#arrowhead-start)" : null);
 
         // Initialize Ace editors
         let basicAce, advAce;
